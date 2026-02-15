@@ -1,17 +1,18 @@
-//
-//  calorie_trackerApp.swift
-//  calorie-tracker
-//
-//  Created by Omid on 15.02.26.
-//
-
 import SwiftUI
+import SwiftData
 
 @main
 struct calorie_trackerApp: App {
+    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            if hasCompletedOnboarding {
+                ContentView()
+            } else {
+                OnboardingView()
+            }
         }
+        .modelContainer(for: [FoodEntry.self, WeightEntry.self])
     }
 }

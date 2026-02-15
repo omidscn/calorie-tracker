@@ -1,24 +1,19 @@
-//
-//  ContentView.swift
-//  calorie-tracker
-//
-//  Created by Omid on 15.02.26.
-//
-
 import SwiftUI
+import SwiftData
 
 struct ContentView: View {
+    @State private var calorieService = CalorieEstimationService()
+    @State private var foodLookupService = FoodLookupService()
+    @State private var viewModel = DayLogViewModel()
+
     var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Hello, world!")
-        }
-        .padding()
+        DayLogView(viewModel: viewModel)
+            .environment(calorieService)
+            .environment(foodLookupService)
     }
 }
 
 #Preview {
     ContentView()
+        .modelContainer(for: [FoodEntry.self, WeightEntry.self], inMemory: true)
 }
