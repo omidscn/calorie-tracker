@@ -71,7 +71,9 @@ struct RecalculateView: View {
                     )
                     .tag(3)
                 }
+                #if os(iOS)
                 .tabViewStyle(.page(indexDisplayMode: .never))
+                #endif
                 .animation(.easeInOut(duration: 0.3), value: currentStep)
 
                 // Navigation buttons
@@ -110,7 +112,9 @@ struct RecalculateView: View {
                 }
             }
             .navigationTitle("Recalculate")
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }

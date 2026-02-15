@@ -18,7 +18,9 @@ struct EditEntrySheet: View {
                 Section("Calories") {
                     HStack {
                         TextField("Calories", value: $entry.calories, format: .number)
+                            #if os(iOS)
                             .keyboardType(.numberPad)
+                            #endif
                             .font(.title2.bold())
                         Text("kcal")
                             .foregroundStyle(.secondary)
@@ -43,7 +45,9 @@ struct EditEntrySheet: View {
                 Section("Details") {
                     LabeledContent("Quantity") {
                         TextField("Qty", value: $entry.quantity, format: .number)
+                            #if os(iOS)
                             .keyboardType(.decimalPad)
+                            #endif
                             .multilineTextAlignment(.trailing)
                     }
                     LabeledContent("Source", value: entry.source)
@@ -53,7 +57,9 @@ struct EditEntrySheet: View {
                 }
             }
             .navigationTitle("Edit Entry")
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
@@ -70,7 +76,9 @@ struct EditEntrySheet: View {
             Text(title)
             Spacer()
             TextField("--", value: value, format: .number)
+                #if os(iOS)
                 .keyboardType(.decimalPad)
+                #endif
                 .multilineTextAlignment(.trailing)
                 .frame(width: 80)
         }

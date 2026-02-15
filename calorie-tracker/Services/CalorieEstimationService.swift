@@ -3,6 +3,7 @@ import Foundation
 @Observable
 final class CalorieEstimationService {
     private let apiKey: String
+    private let rateLimiter = RateLimiter()
 
     var isAvailable: Bool { !apiKey.isEmpty && apiKey != "your-api-key-here" }
 
@@ -14,6 +15,8 @@ final class CalorieEstimationService {
         guard isAvailable else {
             throw CalorieEstimationError.missingAPIKey
         }
+
+        try rateLimiter.checkAndRecord()
 
         var request = URLRequest(url: URL(string: "https://api.openai.com/v1/chat/completions")!)
         request.httpMethod = "POST"
@@ -108,6 +111,7 @@ enum CalorieEstimationError: LocalizedError {
     case networkError
     case apiError(String)
     case invalidResponse
+    case rateLimited(String)
 
     var errorDescription: String? {
         switch self {
@@ -119,6 +123,8 @@ enum CalorieEstimationError: LocalizedError {
             return "OpenAI error: \(message)"
         case .invalidResponse:
             return "Could not parse the AI response."
+        case .rateLimited(let message):
+            return message
         }
     }
 }

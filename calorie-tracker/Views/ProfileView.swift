@@ -57,10 +57,14 @@ struct ProfileView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .navigationTitle("Profile")
+        #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
+        #endif
         .onTapGesture {
             commitWeight()
+            #if os(iOS)
             UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+            #endif
         }
         .sheet(isPresented: $showRecalculate) {
             RecalculateView()
@@ -113,7 +117,9 @@ struct ProfileView: View {
                         TextField("", text: $weightText)
                             .font(.system(size: 36, weight: .bold, design: .rounded))
                             .monospacedDigit()
+                            #if os(iOS)
                             .keyboardType(.decimalPad)
+                            #endif
                             .multilineTextAlignment(.center)
                             .focused($weightFieldFocused)
                             .frame(width: 100)

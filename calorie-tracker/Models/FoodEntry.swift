@@ -29,18 +29,18 @@ enum MealType: String, CaseIterable, Codable {
 
 @Model
 final class FoodEntry {
-    var rawInput: String
-    var foodName: String
-    var calories: Int
+    var rawInput: String = ""
+    var foodName: String = ""
+    var calories: Int = 0
     var proteinGrams: Double?
     var carbsGrams: Double?
     var fatGrams: Double?
-    var quantity: Double
-    var source: String
-    var mealType: String
+    var quantity: Double = 1.0
+    var source: String = "manual"
+    var mealType: String = "Snack"
     var barcode: String?
-    var timestamp: Date
-    var isCalorieOverridden: Bool
+    var timestamp: Date = Date.now
+    var isCalorieOverridden: Bool = false
 
     var meal: MealType {
         get { MealType(rawValue: mealType) ?? .snack }

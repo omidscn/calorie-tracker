@@ -4,7 +4,9 @@ import SwiftData
 struct DayLogView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(CalorieEstimationService.self) private var calorieService
+    #if os(iOS)
     @Environment(FoodLookupService.self) private var foodLookupService
+    #endif
     @Query(sort: \FoodEntry.timestamp, order: .reverse) private var allEntries: [FoodEntry]
 
     var viewModel: DayLogViewModel
@@ -18,6 +20,7 @@ struct DayLogView: View {
     @State private var selectedEntry: FoodEntry?
     @State private var errorMessage: String?
     @Namespace private var profileTransition
+    @State private var transitionCounter = 0
 
     private var todaysEntries: [FoodEntry] {
         allEntries.filter { $0.timestamp.isSameDay(as: selectedDate) }
@@ -109,12 +112,14 @@ struct DayLogView: View {
             EditEntrySheet(entry: entry)
                 .presentationDetents([.medium])
         }
+        #if os(iOS)
         .sheet(isPresented: $showBarcodeScanner) {
             BarcodeScannerView { barcode in
                 showBarcodeScanner = false
                 Task { await handleBarcode(barcode) }
             }
         }
+        #endif
         .alert("Error", isPresented: Binding(
             get: { errorMessage != nil },
             set: { if !$0 { errorMessage = nil } }
@@ -123,7 +128,9 @@ struct DayLogView: View {
         } message: {
             Text(errorMessage ?? "")
         }
+        #if os(iOS)
         .toolbar(.hidden, for: .navigationBar)
+        #endif
         }
     }
 
@@ -169,7 +176,9 @@ struct DayLogView: View {
 
             NavigationLink {
                 ProfileView()
-                    .navigationTransition(.zoom(sourceID: "caloriePill", in: profileTransition))
+                    #if os(iOS)
+                    .navigationTransition(.zoom(sourceID: transitionCounter, in: profileTransition))
+                    #endif
             } label: {
                 HStack(alignment: .center, spacing: 4) {
                     VStack(spacing: 2) {
@@ -194,7 +203,10 @@ struct DayLogView: View {
                 .glassEffect(.regular.interactive(), in: .capsule)
             }
             .buttonStyle(.plain)
-            .matchedTransitionSource(id: "caloriePill", in: profileTransition)
+            #if os(iOS)
+            .matchedTransitionSource(id: transitionCounter, in: profileTransition)
+            #endif
+            .onAppear { transitionCounter += 1 }
         }
         .padding(.top, 8)
         .padding(.bottom, 8)
@@ -284,6 +296,7 @@ struct DayLogView: View {
         return (text, 0)
     }
 
+    #if os(iOS)
     private func handleBarcode(_ barcode: String) async {
         isProcessing = true
         do {
@@ -299,4 +312,5 @@ struct DayLogView: View {
         }
         isProcessing = false
     }
+    #endif
 }

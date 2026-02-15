@@ -1,8 +1,7 @@
 import SwiftUI
 
-#if canImport(VisionKit)
+#if os(iOS)
 import VisionKit
-#endif
 
 struct BarcodeScannerView: View {
     var onBarcodeScanned: (String) -> Void
@@ -11,7 +10,6 @@ struct BarcodeScannerView: View {
     var body: some View {
         NavigationStack {
             Group {
-#if os(iOS)
                 if DataScannerViewController.isSupported && DataScannerViewController.isAvailable {
                     DataScannerRepresentable(onBarcodeScanned: { barcode in
                         onBarcodeScanned(barcode)
@@ -20,9 +18,6 @@ struct BarcodeScannerView: View {
                 } else {
                     scannerUnavailableView
                 }
-#else
-                scannerUnavailableView
-#endif
             }
             .navigationTitle("Scan Barcode")
             .navigationBarTitleDisplayMode(.inline)
@@ -43,9 +38,8 @@ struct BarcodeScannerView: View {
     }
 }
 
-// MARK: - DataScanner UIKit Bridge (iOS only)
+// MARK: - DataScanner UIKit Bridge
 
-#if os(iOS)
 private struct DataScannerRepresentable: UIViewControllerRepresentable {
     var onBarcodeScanned: (String) -> Void
 

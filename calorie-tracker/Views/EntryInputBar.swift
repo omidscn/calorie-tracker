@@ -5,7 +5,7 @@ struct EntryInputBar: View {
     @Binding var selectedMealType: MealType
     @Binding var aiEnabled: Bool
     var onSubmit: () -> Void
-    var onBarcodeTap: () -> Void
+    var onBarcodeTap: () -> Void = {}
     var isProcessing: Bool
 
     var body: some View {
@@ -51,6 +51,7 @@ struct EntryInputBar: View {
                 }
                 .disabled(isProcessing)
 
+                #if os(iOS)
                 Button(action: onBarcodeTap) {
                     Image(systemName: "barcode.viewfinder")
                         .font(.title3)
@@ -58,6 +59,7 @@ struct EntryInputBar: View {
                         .glassEffect(.regular.interactive(), in: .circle)
                 }
                 .disabled(isProcessing)
+                #endif
             }
         }
         .padding(.horizontal, 16)

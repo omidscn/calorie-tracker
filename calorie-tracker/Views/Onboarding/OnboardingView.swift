@@ -72,7 +72,9 @@ struct OnboardingView: View {
                 )
                 .tag(4)
             }
+            #if os(iOS)
             .tabViewStyle(.page(indexDisplayMode: .never))
+            #endif
             .animation(.easeInOut(duration: 0.3), value: currentStep)
 
             // Navigation buttons

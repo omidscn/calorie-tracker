@@ -150,7 +150,9 @@ struct OnboardingBodyStep: View {
                         TextField("", text: $ageText)
                             .font(.system(size: 36, weight: .bold, design: .rounded))
                             .monospacedDigit()
+                            #if os(iOS)
                             .keyboardType(.numberPad)
+                            #endif
                             .multilineTextAlignment(.center)
                             .focused($focusedField, equals: .age)
                             .frame(width: 80)
@@ -217,7 +219,9 @@ struct OnboardingBodyStep: View {
                         TextField("", text: $heightText)
                             .font(.system(size: 36, weight: .bold, design: .rounded))
                             .monospacedDigit()
+                            #if os(iOS)
                             .keyboardType(.decimalPad)
+                            #endif
                             .multilineTextAlignment(.center)
                             .focused($focusedField, equals: .height)
                             .frame(width: 100)
@@ -284,7 +288,9 @@ struct OnboardingBodyStep: View {
                         TextField("", text: $weightText)
                             .font(.system(size: 36, weight: .bold, design: .rounded))
                             .monospacedDigit()
+                            #if os(iOS)
                             .keyboardType(.decimalPad)
+                            #endif
                             .multilineTextAlignment(.center)
                             .focused($focusedField, equals: .weight)
                             .frame(width: 100)
