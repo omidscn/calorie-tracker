@@ -4,6 +4,7 @@ import SwiftData
 @main
 struct calorie_trackerApp: App {
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+    @State private var authService = AuthService()
 
     let modelContainer: ModelContainer
 
@@ -20,11 +21,18 @@ struct calorie_trackerApp: App {
 
     var body: some Scene {
         WindowGroup {
-            if hasCompletedOnboarding {
-                ContentView()
-            } else {
-                OnboardingView()
+            Group {
+                if authService.isLoading {
+                    ProgressView()
+                } else if !authService.isAuthenticated {
+                    LoginView()
+                } else if !hasCompletedOnboarding {
+                    OnboardingView()
+                } else {
+                    ContentView()
+                }
             }
+            .environment(authService)
         }
         .modelContainer(modelContainer)
     }

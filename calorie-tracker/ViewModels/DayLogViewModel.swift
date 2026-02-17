@@ -15,7 +15,7 @@ final class DayLogViewModel {
         let entry = FoodEntry(
             rawInput: text,
             foodName: estimate.foodName,
-            calories: estimate.totalCalories,
+            calories: Int(estimate.totalCalories),
             proteinGrams: estimate.proteinGrams,
             carbsGrams: estimate.carbsGrams,
             fatGrams: estimate.fatGrams,

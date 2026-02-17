@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import Charts
+import Auth
 
 struct ProfileView: View {
     @Environment(\.modelContext) private var modelContext
@@ -21,6 +22,8 @@ struct ProfileView: View {
     @State private var sliderCalories: Double = 2000
     @State private var showAllWeightEntries = false
     @State private var showRecalculate = false
+    @State private var showSignOutConfirmation = false
+    @Environment(AuthService.self) private var authService
     @FocusState private var weightFieldFocused: Bool
 
     private var sex: BiologicalSex {
@@ -52,10 +55,12 @@ struct ProfileView: View {
                 streakSection
                 projectionSection
                 calorieGoalSection
+                accountSection
             }
             .padding()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .scrollContentBackground(.hidden)
         .navigationTitle("Profile")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
@@ -224,7 +229,7 @@ struct ProfileView: View {
                     }
                 }
                 .padding(.vertical, 4)
-                .background(.thinMaterial, in: .rect(cornerRadius: 12))
+                .glassEffect(.regular, in: .rect(cornerRadius: 12))
                 .clipShape(.rect(cornerRadius: 12))
             } else {
                 Text("No weight entries yet")
@@ -235,7 +240,7 @@ struct ProfileView: View {
             }
         }
         .padding()
-        .background(.thinMaterial, in: .rect(cornerRadius: 20))
+        .glassEffect(.regular, in: .rect(cornerRadius: 20))
     }
 
     private func commitWeight() {
@@ -339,7 +344,7 @@ struct ProfileView: View {
             }
         }
         .padding()
-        .background(.thinMaterial, in: .rect(cornerRadius: 20))
+        .glassEffect(.regular, in: .rect(cornerRadius: 20))
     }
 
     // MARK: - Calorie Streak (Contribution Graph)
@@ -460,7 +465,7 @@ struct ProfileView: View {
             }
         }
         .padding()
-        .background(.thinMaterial, in: .rect(cornerRadius: 20))
+        .glassEffect(.regular, in: .rect(cornerRadius: 20))
     }
 
     private var legendColors: [Color] {
@@ -608,7 +613,7 @@ struct ProfileView: View {
                         .foregroundStyle(.secondary)
                 }
                 .padding(10)
-                .background(.thinMaterial, in: .rect(cornerRadius: 10))
+                .glassEffect(.regular, in: .rect(cornerRadius: 10))
             } else if weeklyKg > 1.0 {
                 HStack(spacing: 6) {
                     Image(systemName: "exclamationmark.triangle.fill")
@@ -618,11 +623,11 @@ struct ProfileView: View {
                         .foregroundStyle(.secondary)
                 }
                 .padding(10)
-                .background(.thinMaterial, in: .rect(cornerRadius: 10))
+                .glassEffect(.regular, in: .rect(cornerRadius: 10))
             }
         }
         .padding()
-        .background(.thinMaterial, in: .rect(cornerRadius: 20))
+        .glassEffect(.regular, in: .rect(cornerRadius: 20))
     }
 
     // MARK: - Calorie Goal
@@ -711,7 +716,51 @@ struct ProfileView: View {
             .padding(.top, 4)
         }
         .padding()
-        .background(.thinMaterial, in: .rect(cornerRadius: 20))
+        .glassEffect(.regular, in: .rect(cornerRadius: 20))
+    }
+
+    // MARK: - Account
+
+    private var accountSection: some View {
+        VStack(spacing: 16) {
+            HStack {
+                Text("Account")
+                    .font(.headline)
+                Spacer()
+            }
+
+            if let email = authService.currentUser?.email {
+                HStack {
+                    Image(systemName: "envelope")
+                        .foregroundStyle(.secondary)
+                    Text(email)
+                        .font(.subheadline)
+                    Spacer()
+                }
+            }
+
+            Button(role: .destructive) {
+                showSignOutConfirmation = true
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "rectangle.portrait.and.arrow.right")
+                    Text("Sign Out")
+                }
+                .font(.subheadline.weight(.medium))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .glassEffect(.regular.interactive(), in: .capsule)
+            }
+            .confirmationDialog("Sign Out", isPresented: $showSignOutConfirmation, titleVisibility: .visible) {
+                Button("Sign Out", role: .destructive) {
+                    Task { await authService.signOut() }
+                }
+            } message: {
+                Text("Are you sure you want to sign out?")
+            }
+        }
+        .padding()
+        .glassEffect(.regular, in: .rect(cornerRadius: 20))
     }
 }
 

@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		2EF745102F42711E003F3521 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 2EBD41312F42C00100BBBBBB /* Supabase */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		2EBD411F2F41B78400FFCCC2 /* calorie-tracker.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "calorie-tracker.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -23,6 +27,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				2EF745102F42711E003F3521 /* Supabase in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -65,6 +70,7 @@
 			);
 			name = "calorie-tracker";
 			packageProductDependencies = (
+				2EBD41312F42C00100BBBBBB /* Supabase */,
 			);
 			productName = "calorie-tracker";
 			productReference = 2EBD411F2F41B78400FFCCC2 /* calorie-tracker.app */;
@@ -94,6 +100,9 @@
 			);
 			mainGroup = 2EBD41162F41B78400FFCCC2;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				2EBD41302F42C00100AAAAAA /* XCRemoteSwiftPackageReference "supabase-swift" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 2EBD41202F41B78400FFCCC2 /* Products */;
 			projectDirPath = "";
@@ -359,6 +368,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		2EBD41302F42C00100AAAAAA /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/supabase/supabase-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		2EBD41312F42C00100BBBBBB /* Supabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 2EBD41302F42C00100AAAAAA /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Supabase;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 2EBD41172F41B78400FFCCC2 /* Project object */;
 }

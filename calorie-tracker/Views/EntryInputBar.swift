@@ -8,62 +8,83 @@ struct EntryInputBar: View {
     var onBarcodeTap: () -> Void = {}
     var isProcessing: Bool
 
-    var body: some View {
-        VStack(spacing: 8) {
-            Picker("Meal", selection: $selectedMealType) {
-                ForEach(MealType.allCases, id: \.self) { type in
-                    Label(type.rawValue, systemImage: type.icon)
-                        .tag(type)
-                }
-            }
-            .pickerStyle(.segmented)
+    private var hasText: Bool {
+        !inputText.trimmingCharacters(in: .whitespaces).isEmpty
+    }
 
-            HStack(spacing: 12) {
+    var body: some View {
+        HStack(spacing: 12) {
+            Menu {
+                Section("Meal") {
+                    ForEach(MealType.allCases, id: \.self) { type in
+                        Button {
+                            selectedMealType = type
+                        } label: {
+                            Label(type.rawValue, systemImage: type.icon)
+                        }
+                    }
+                }
+
+                Section {
+                    Button {
+                        inputText = ""
+                        aiEnabled.toggle()
+                    } label: {
+                        Label(
+                            aiEnabled ? "Switch to Manual" : "Switch to AI",
+                            systemImage: aiEnabled ? "number" : "sparkles"
+                        )
+                    }
+
+                    #if os(iOS)
+                    Button(action: onBarcodeTap) {
+                        Label("Scan Barcode", systemImage: "barcode.viewfinder")
+                    }
+                    #endif
+                }
+            } label: {
+                Image(systemName: selectedMealType.icon)
+                    .font(.title3)
+                    .frame(width: 48, height: 48)
+                    .contentShape(.circle)
+                    .clipShape(.circle)
+                    .glassEffect(.regular.interactive(), in: .circle)
+            }
+
+            HStack(spacing: 8) {
+                if aiEnabled {
+                    Image(systemName: "sparkles")
+                        .font(.subheadline)
+                        .foregroundStyle(.blue)
+                }
+
                 TextField(
-                    aiEnabled ? "3x Apples, chicken sandwich..." : "Calories (e.g. 500)",
+                    aiEnabled ? "Describe your food..." : "Food name 500",
                     text: $inputText
                 )
-                .frame(minHeight: 44)
+                .font(.body)
                 .textFieldStyle(.plain)
                 .submitLabel(.done)
                 .onSubmit {
-                    let trimmed = inputText.trimmingCharacters(in: .whitespaces)
-                    if !trimmed.isEmpty {
-                        onSubmit()
-                    }
+                    if hasText { onSubmit() }
                 }
                 .disabled(isProcessing)
 
                 if isProcessing {
                     ProgressView()
                         .controlSize(.small)
+                } else if hasText {
+                    Button(action: onSubmit) {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(.title2)
+                            .foregroundStyle(.blue)
+                    }
                 }
-
-                Button {
-                    inputText = ""
-                    aiEnabled.toggle()
-                } label: {
-                    Text("AI")
-                        .font(.system(.body, design: .rounded, weight: .bold))
-                        .foregroundStyle(aiEnabled ? Color.blue : Color.gray)
-                        .frame(width: 44, height: 44)
-                        .glassEffect(.regular.interactive(), in: .circle)
-                }
-                .disabled(isProcessing)
-
-                #if os(iOS)
-                Button(action: onBarcodeTap) {
-                    Image(systemName: "barcode.viewfinder")
-                        .font(.title3)
-                        .frame(width: 44, height: 44)
-                        .glassEffect(.regular.interactive(), in: .circle)
-                }
-                .disabled(isProcessing)
-                #endif
             }
+            .padding(.leading, 16)
+            .padding(.trailing, 12)
+            .padding(.vertical, 14)
+            .glassEffect(.regular, in: .capsule)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-        .glassEffect(.regular, in: .rect(cornerRadius: 24))
     }
 }

@@ -1,130 +1,223 @@
 import Foundation
-
+import Supabase
+                                                                                                                                                                                                               
 @Observable
 final class CalorieEstimationService {
-    private let apiKey: String
-    private let rateLimiter = RateLimiter()
+                                                                                                                                                                                                               
+  func estimate(from input: String) async throws -> CalorieEstimate {
+      guard let session = supabase.auth.currentSession else {
+          throw CalorieEstimationError.notAuthenticated
+      }
+      let accessToken = session.accessToken
 
-    var isAvailable: Bool { !apiKey.isEmpty && apiKey != "your-api-key-here" }
+      var request = URLRequest(url: URL(string: "https://api.omidsprivatehub.tech/v1/chat/completions")!)
+      request.httpMethod = "POST"
+      request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+      request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-    init() {
-        self.apiKey = Configuration.openAIAPIKey
-    }
+      let schema: [String: Any] = [
+          "type": "object",
+          "properties": [
+              "reasoning": [
+                  "type": "string",
+                  "description": "Step-by-step reasoning: identify the food, estimate portion weight in grams, look up per-100g nutrition values, scale to actual quantity, and verify macro-calorie consistency."
+              ],
+              "foodName": [
+                  "type": "string",
+                  "description": "Clean, readable food name with portion context when helpful (e.g. 'Large Apple' or 'Slice of Pepperoni Pizza')."
+              ],
+              "servingDescription": [
+                  "type": "string",
+                  "description": "The assumed serving size with weight in grams (e.g. '1 medium apple (~182g)' or '2 large eggs (~100g)')."
+              ],
+              "totalCalories": [
+                  "type": "number",
+                  "description": "Total calories (kcal) for the FULL quantity, rounded to the nearest 5."
+              ],
+              "proteinGrams": [
+                  "type": "number",
+                  "description": "Total protein in grams for the full quantity, rounded to nearest 0.5g."
+              ],
+              "carbsGrams": [
+                  "type": "number",
+                  "description": "Total carbohydrates in grams for the full quantity, rounded to nearest 0.5g."
+              ],
+              "fatGrams": [
+                  "type": "number",
+                  "description": "Total fat in grams for the full quantity, rounded to nearest 0.5g."
+              ],
+              "quantity": [
+                  "type": "number",
+                  "description": "Number of servings or units parsed from the input. Defaults to 1.0 if not specified."
+              ]
+          ],
+          "required": ["reasoning", "foodName", "servingDescription", "totalCalories", "proteinGrams", "carbsGrams", "fatGrams", "quantity"],
+          "additionalProperties": false
+      ]
 
-    func estimate(from input: String) async throws -> CalorieEstimate {
-        guard isAvailable else {
-            throw CalorieEstimationError.missingAPIKey
-        }
+      let systemPrompt = """
+      You are a registered dietitian with deep knowledge of the USDA FoodData Central database. Your task is to provide accurate calorie and macronutrient estimates for foods described by users.
 
-        try rateLimiter.checkAndRecord()
+      ## Estimation Process (follow these steps in order)
+      1. Identify each food item and its preparation method from the user's input.
+      2. Determine the quantity or serving size. If none is specified, use standard real-world portion sizes (see defaults below).
+      3. Estimate the weight in grams for the described quantity.
+      4. Look up typical nutritional values per 100g using USDA reference data.
+      5. Scale to the actual quantity and compute totals.
+      6. Verify consistency: (protein × 4) + (carbs × 4) + (fat × 9) should be within ±10% of totalCalories. Adjust if needed.
 
-        var request = URLRequest(url: URL(string: "https://api.openai.com/v1/chat/completions")!)
-        request.httpMethod = "POST"
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+      ## Portion Size Defaults (when NO size is specified)
+      Use typical real-world serving sizes, NOT small dietary guideline servings:
+      - Fruits: 1 medium piece (~150-180g)
+      - Vegetables: 1 cup raw or ½ cup cooked (~80-90g)
+      - Meat/Poultry/Fish: 1 palm-sized cooked portion (~140g / 5oz)
+      - Rice/Pasta: 1 generous cooked cup (~200-250g)
+      - Bread: 1 regular slice (~30g)
+      - Eggs: 1 large egg (~50g)
+      - Liquids/Beverages: 1 cup (240ml)
 
-        let schema: [String: Any] = [
-            "type": "object",
-            "properties": [
-                "foodName": ["type": "string"],
-                "totalCalories": ["type": "integer"],
-                "proteinGrams": ["type": "number"],
-                "carbsGrams": ["type": "number"],
-                "fatGrams": ["type": "number"],
-                "quantity": ["type": "number"]
-            ],
-            "required": ["foodName", "totalCalories", "proteinGrams", "carbsGrams", "fatGrams", "quantity"],
-            "additionalProperties": false
-        ]
+      ## Quantity Parsing
+      - "3x Apples" → quantity: 3, totalCalories = calories for 3 apples
+      - "2 slices of pizza" → quantity: 2, totalCalories = calories for 2 slices
+      - "a bowl of rice" → quantity: 1, assume ~300g cooked rice
+      - "Chicken breast" → quantity: 1, assume 1 medium breast (~170g cooked)
+      - Always return totalCalories for the FULL quantity, never per-unit.
 
-        let body: [String: Any] = [
-            "model": "gpt-5-mini",
-            "messages": [
-                [
-                    "role": "system",
-                    "content": "You are a nutrition expert. Estimate calories and macronutrients for food items. Parse quantities from input like '3x Apples' (quantity = 3). Provide total calories for the full quantity, not per unit."
-                ],
-                [
-                    "role": "user",
-                    "content": "Estimate the nutritional information for: \(input)"
-                ]
-            ],
-            "response_format": [
-                "type": "json_schema",
-                "json_schema": [
-                    "name": "calorie_estimate",
-                    "strict": true,
-                    "schema": schema
-                ]
-            ]
-        ]
+      ## Cooking Method
+      - Account for cooking method when specified (grilled vs fried can add 50-100+ kcal from oil).
+      - If no method is mentioned, assume the most common preparation for that food.
+      - For restaurant food, assume generous portions with added oils/butter.
 
-        let requestData = try JSONSerialization.data(withJSONObject: body)
-        request.httpBody = requestData
+      ## Accuracy Rules
+      - Round calories to the nearest 5 kcal.
+      - Round macronutrients to nearest 0.5g.
+      - When uncertain, prefer the middle of the plausible range rather than underestimating.
+      - For branded or restaurant items, use known published nutrition data when available.
+      """
 
-        if let requestJSON = String(data: requestData, encoding: .utf8) {
-            print("📤 [OpenAI Request] POST /v1/chat/completions")
-            print("📤 [OpenAI Request] Body: \(requestJSON)")
-        }
+      let fewShotExamples: [[String: Any]] = [
+          [
+              "role": "user",
+              "content": "3x Apples"
+          ],
+          [
+              "role": "assistant",
+              "content": "{\"reasoning\":\"The user wants 3 apples. A medium apple weighs ~182g. Per USDA, a medium apple has about 95 kcal, 0.5g protein, 25g carbs, 0.3g fat. For 3 apples: 285 kcal, 1.5g protein, 75g carbs, 0.9g fat. Consistency check: (1.5×4)+(75×4)+(0.9×9) = 6+300+8.1 = 314.1. That's ~10% over 285, which is due to fiber calories not being fully absorbed. 285 kcal is the standard USDA value so I'll keep it.\",\"foodName\":\"Medium Apple\",\"servingDescription\":\"3 medium apples (~546g total)\",\"totalCalories\":285,\"proteinGrams\":1.5,\"carbsGrams\":75,\"fatGrams\":1,\"quantity\":3}"
+          ],
+          [
+              "role": "user",
+              "content": "Big Mac"
+          ],
+          [
+              "role": "assistant",
+              "content": "{\"reasoning\":\"A McDonald's Big Mac has well-known published nutrition data. Per McDonald's official nutrition info: 550 kcal, 25g protein, 45g carbs, 30g fat. Consistency: (25×4)+(45×4)+(30×9) = 100+180+270 = 550. Perfect match.\",\"foodName\":\"McDonald's Big Mac\",\"servingDescription\":\"1 Big Mac sandwich (~215g)\",\"totalCalories\":550,\"proteinGrams\":25,\"carbsGrams\":45,\"fatGrams\":30,\"quantity\":1}"
+          ],
+          [
+              "role": "user",
+              "content": "grilled chicken breast with rice and veggies"
+          ],
+          [
+              "role": "assistant",
+              "content": "{\"reasoning\":\"Breaking down the composite meal: 1) Grilled chicken breast (~170g cooked): ~280 kcal, 53g protein, 0g carbs, 6g fat. 2) Cooked white rice (~200g, one generous cup): ~260 kcal, 5g protein, 57g carbs, 0.5g fat. 3) Mixed steamed vegetables (~100g): ~35 kcal, 2g protein, 7g carbs, 0.5g fat. Totals: 575 kcal, 60g protein, 64g carbs, 7g fat. Consistency: (60×4)+(64×4)+(7×9) = 240+256+63 = 559. Within 3% of 575, close enough — slight difference from rounding and fiber.\",\"foodName\":\"Grilled Chicken Breast with Rice & Veggies\",\"servingDescription\":\"1 chicken breast (~170g) + 1 cup rice (~200g) + mixed vegetables (~100g)\",\"totalCalories\":575,\"proteinGrams\":60,\"carbsGrams\":64,\"fatGrams\":7,\"quantity\":1}"
+          ]
+      ]
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+      var messages: [[String: Any]] = [
+          ["role": "system", "content": systemPrompt]
+      ]
+      messages.append(contentsOf: fewShotExamples)
+      messages.append(["role": "user", "content": input])
 
-        let rawResponse = String(data: data, encoding: .utf8) ?? "<unable to decode>"
-        print("📥 [OpenAI Response] Raw: \(rawResponse)")
+      let body: [String: Any] = [
+          "seed": 42,
+          "messages": messages,
+          "response_format": [
+              "type": "json_schema",
+              "json_schema": [
+                  "name": "calorie_estimate",
+                  "strict": true,
+                  "schema": schema
+              ]
+          ]
+      ]
 
-        guard let http = response as? HTTPURLResponse else {
-            print("❌ [OpenAI] Not an HTTP response")
-            throw CalorieEstimationError.networkError
-        }
+      let requestData = try JSONSerialization.data(withJSONObject: body)
+      request.httpBody = requestData
 
-        print("📥 [OpenAI Response] Status: \(http.statusCode)")
+      if let requestJSON = String(data: requestData, encoding: .utf8) {
+          print("📤 [OpenAI Request] POST /v1/chat/completions")
+          print("📤 [OpenAI Request] Body: \(requestJSON)")
+      }
 
-        guard http.statusCode == 200 else {
-            let message = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["error"]
-                .flatMap { ($0 as? [String: Any])?["message"] as? String }
-                ?? "HTTP \(http.statusCode)"
-            print("❌ [OpenAI] Error: \(message)")
-            throw CalorieEstimationError.apiError(message)
-        }
+      let (data, response) = try await URLSession.shared.data(for: request)
 
-        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let choices = json["choices"] as? [[String: Any]],
-              let first = choices.first,
-              let message = first["message"] as? [String: Any],
-              let content = message["content"] as? String,
-              let contentData = content.data(using: .utf8) else {
-            print("❌ [OpenAI] Could not extract content from response")
-            throw CalorieEstimationError.invalidResponse
-        }
+      let rawResponse = String(data: data, encoding: .utf8) ?? "<unable to decode>"
+      print("📥 [OpenAI Response] Raw: \(rawResponse)")
 
-        print("✅ [OpenAI] Parsed content: \(content)")
+      guard let http = response as? HTTPURLResponse else {
+          print("❌ [OpenAI] Not an HTTP response")
+          throw CalorieEstimationError.networkError
+      }
 
-        let estimate = try JSONDecoder().decode(CalorieEstimate.self, from: contentData)
-        print("✅ [OpenAI] Decoded: \(estimate.foodName) — \(estimate.totalCalories) kcal (P:\(estimate.proteinGrams)g C:\(estimate.carbsGrams)g F:\(estimate.fatGrams)g) qty:\(estimate.quantity)")
+      print("📥 [OpenAI Response] Status: \(http.statusCode)")
 
-        return estimate
-    }
+      guard http.statusCode == 200 else {
+          let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+          let message: String
+          if let errorString = parsed?["error"] as? String {
+              message = errorString
+          } else if let errorObj = parsed?["error"] as? [String: Any],
+                    let msg = errorObj["message"] as? String {
+              message = msg
+          } else {
+              message = "HTTP \(http.statusCode)"
+          }
+          print("❌ [API] Error: \(message)")
+
+          if http.statusCode == 429 {
+              throw CalorieEstimationError.rateLimited(message)
+          }
+          throw CalorieEstimationError.apiError(message)
+      }
+
+      guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let choices = json["choices"] as? [[String: Any]],
+            let first = choices.first,
+            let message = first["message"] as? [String: Any],
+            let content = message["content"] as? String,
+            let contentData = content.data(using: .utf8) else {
+          print("❌ [OpenAI] Could not extract content from response")
+          throw CalorieEstimationError.invalidResponse
+      }
+
+      print("✅ [OpenAI] Parsed content: \(content)")
+
+      let estimate = try JSONDecoder().decode(CalorieEstimate.self, from: contentData)
+      print("✅ [OpenAI] Decoded: \(estimate.foodName) — \(estimate.totalCalories) kcal (P:\(estimate.proteinGrams)g C:\(estimate.carbsGrams)g F:\(estimate.fatGrams)g) qty:\(estimate.quantity)")
+
+      return estimate
+  }
 }
 
 enum CalorieEstimationError: LocalizedError {
-    case missingAPIKey
-    case networkError
-    case apiError(String)
-    case invalidResponse
-    case rateLimited(String)
+  case notAuthenticated
+  case networkError
+  case apiError(String)
+  case invalidResponse
+  case rateLimited(String)
 
-    var errorDescription: String? {
-        switch self {
-        case .missingAPIKey:
-            return "OpenAI API key not set. Add your key to the .env file at the project root."
-        case .networkError:
-            return "Network request failed. Check your connection."
-        case .apiError(let message):
-            return "OpenAI error: \(message)"
-        case .invalidResponse:
-            return "Could not parse the AI response."
-        case .rateLimited(let message):
-            return message
-        }
-    }
+  var errorDescription: String? {
+      switch self {
+      case .notAuthenticated:
+          return "You must be signed in to use AI calorie estimation."
+      case .networkError:
+          return "Network request failed. Check your connection."
+      case .apiError(let message):
+          return "OpenAI error: \(message)"
+      case .invalidResponse:
+          return "Could not parse the AI response."
+      case .rateLimited(let message):
+          return message
+      }
+  }
 }

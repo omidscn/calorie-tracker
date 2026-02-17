@@ -9,6 +9,18 @@ extension Date {
         Calendar.current.isDate(self, inSameDayAs: other)
     }
 
+    private static let displayDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEEE, MMM d"
+        return formatter
+    }()
+
+    private static let shortTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        return formatter
+    }()
+
     var displayString: String {
         if Calendar.current.isDateInToday(self) {
             return "Today"
@@ -17,15 +29,11 @@ extension Date {
         } else if Calendar.current.isDateInTomorrow(self) {
             return "Tomorrow"
         } else {
-            let formatter = DateFormatter()
-            formatter.dateFormat = "EEEE, MMM d"
-            return formatter.string(from: self)
+            return Self.displayDateFormatter.string(from: self)
         }
     }
 
     var shortTimeString: String {
-        let formatter = DateFormatter()
-        formatter.timeStyle = .short
-        return formatter.string(from: self)
+        Self.shortTimeFormatter.string(from: self)
     }
 }

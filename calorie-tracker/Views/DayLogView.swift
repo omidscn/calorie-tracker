@@ -19,8 +19,7 @@ struct DayLogView: View {
     @State private var showBarcodeScanner = false
     @State private var selectedEntry: FoodEntry?
     @State private var errorMessage: String?
-    @Namespace private var profileTransition
-    @State private var transitionCounter = 0
+    @State private var showProfile = false
 
     private var todaysEntries: [FoodEntry] {
         allEntries.filter { $0.timestamp.isSameDay(as: selectedDate) }
@@ -28,6 +27,10 @@ struct DayLogView: View {
 
     private var totalCalories: Int {
         todaysEntries.reduce(0) { $0 + $1.calories }
+    }
+
+    private var remainingCalories: Int {
+        Int(dailyCalorieGoal) - totalCalories
     }
 
     private var groupedEntries: [(MealType, [FoodEntry])] {
@@ -41,9 +44,62 @@ struct DayLogView: View {
 
     var body: some View {
         NavigationStack {
+            mainContent
+                .sheet(item: $selectedEntry) { entry in
+                    EditEntrySheet(entry: entry)
+                        .presentationDetents([.medium])
+                }
+                .sheet(isPresented: $showProfile) {
+                    NavigationStack {
+                        ProfileView()
+                    }
+                    .presentationDetents([.large])
+                }
+                #if os(iOS)
+                .sheet(isPresented: $showBarcodeScanner) {
+                    BarcodeScannerView { barcode in
+                        showBarcodeScanner = false
+                        Task { await handleBarcode(barcode) }
+                    }
+                }
+                #endif
+                .alert("Error", isPresented: Binding(
+                    get: { errorMessage != nil },
+                    set: { if !$0 { errorMessage = nil } }
+                )) {
+                    Button("OK") { errorMessage = nil }
+                } message: {
+                    Text(errorMessage ?? "")
+                }
+                #if os(iOS)
+                .toolbar(.hidden, for: .navigationBar)
+                #endif
+        }
+    }
+
+    // MARK: - Main Content
+
+    private var mainContent: some View {
         VStack(spacing: 0) {
             headerView
+            entryListView
+            EntryInputBar(
+                inputText: $inputText,
+                selectedMealType: $selectedMealType,
+                aiEnabled: $aiEnabled,
+                onSubmit: { aiEnabled ? submitAIEntry() : submitManualEntry() },
+                onBarcodeTap: { showBarcodeScanner = true },
+                isProcessing: isProcessing
+            )
+            .padding(.horizontal)
+            .padding(.bottom, 8)
+        }
+    }
 
+    // MARK: - Entry List
+
+    private var entryListView: some View {
+        ScrollViewReader { proxy in
             List {
                 ForEach(groupedEntries, id: \.0) { mealType, entries in
                     Section {
@@ -56,7 +112,7 @@ struct DayLogView: View {
                             .buttonStyle(.plain)
                             .listRowBackground(Color.clear)
                             .listRowSeparator(.hidden)
-                            .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+                            .listRowInsets(EdgeInsets(top: 2, leading: 16, bottom: 2, trailing: 16))
                             .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                 Button(role: .destructive) {
                                     withAnimation {
@@ -80,64 +136,37 @@ struct DayLogView: View {
                         .textCase(nil)
                     }
                 }
+
+                Section {
+                    Color.clear
+                        .frame(height: 24)
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                        .id("bottomAnchor")
+                }
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
             .scrollDismissesKeyboard(.interactively)
+            #if os(iOS)
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+                withAnimation(.easeOut(duration: 0.25)) {
+                    proxy.scrollTo("bottomAnchor", anchor: .bottom)
+                }
+            }
+            #endif
             .overlay {
                 if todaysEntries.isEmpty {
                     emptyStateView
                 }
             }
-
-            EntryInputBar(
-                inputText: $inputText,
-                selectedMealType: $selectedMealType,
-                aiEnabled: $aiEnabled,
-                onSubmit: { aiEnabled ? submitAIEntry() : submitManualEntry() },
-                onBarcodeTap: { showBarcodeScanner = true },
-                isProcessing: isProcessing
-            )
-            .padding(.horizontal)
-            .padding(.bottom, 8)
-        }
-        .onTapGesture {
-            #if os(iOS)
-            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-            #endif
-        }
-        .animation(.spring(duration: 0.3), value: todaysEntries.count)
-        .animation(.default, value: selectedDate)
-        .sheet(item: $selectedEntry) { entry in
-            EditEntrySheet(entry: entry)
-                .presentationDetents([.medium])
-        }
-        #if os(iOS)
-        .sheet(isPresented: $showBarcodeScanner) {
-            BarcodeScannerView { barcode in
-                showBarcodeScanner = false
-                Task { await handleBarcode(barcode) }
-            }
-        }
-        #endif
-        .alert("Error", isPresented: Binding(
-            get: { errorMessage != nil },
-            set: { if !$0 { errorMessage = nil } }
-        )) {
-            Button("OK") { errorMessage = nil }
-        } message: {
-            Text(errorMessage ?? "")
-        }
-        #if os(iOS)
-        .toolbar(.hidden, for: .navigationBar)
-        #endif
         }
     }
 
     // MARK: - Header
 
     private var headerView: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 12) {
             HStack {
                 Button {
                     withAnimation {
@@ -174,39 +203,28 @@ struct DayLogView: View {
             }
             .padding(.horizontal)
 
-            NavigationLink {
-                ProfileView()
-                    #if os(iOS)
-                    .navigationTransition(.zoom(sourceID: transitionCounter, in: profileTransition))
-                    #endif
+            Button {
+                showProfile = true
             } label: {
-                HStack(alignment: .center, spacing: 4) {
-                    VStack(spacing: 2) {
-                        Text("\(totalCalories) kcal")
-                            .font(.system(size: 48, weight: .bold, design: .rounded))
-                            .monospacedDigit()
-                            .contentTransition(.numericText())
+                VStack(spacing: 2) {
+                    Text("\(remainingCalories) kcal")
+                        .font(.system(size: 32, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                        .contentTransition(.numericText())
 
-                        if dailyCalorieGoal > 0 {
-                            Text("/ \(dailyCalorieGoal)")
-                                .font(.system(size: 10, weight: .black, design: .rounded))
-                                .foregroundStyle(.secondary)
-                        }
-                    }
+                    Text("remains")
+                        .font(.system(size: 10, weight: .black, design: .rounded))
+                        .foregroundStyle(.secondary)
 
-                    Image(systemName: "chevron.right")
-                        .font(.caption)
+                    Image(systemName: "chevron.down")
+                        .font(.caption2)
                         .foregroundStyle(.tertiary)
                 }
-                .padding(.horizontal, 32)
-                .padding(.vertical, 16)
+                .padding(.horizontal, 24)
+                .padding(.vertical, 12)
                 .glassEffect(.regular.interactive(), in: .capsule)
             }
             .buttonStyle(.plain)
-            #if os(iOS)
-            .matchedTransitionSource(id: transitionCounter, in: profileTransition)
-            #endif
-            .onAppear { transitionCounter += 1 }
         }
         .padding(.top, 8)
         .padding(.bottom, 8)
