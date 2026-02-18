@@ -4,6 +4,7 @@ import Charts
 import Auth
 
 struct ProfileView: View {
+    @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \WeightEntry.timestamp, order: .reverse) private var weightEntries: [WeightEntry]
     @Query(sort: \FoodEntry.timestamp, order: .reverse) private var allFoodEntries: [FoodEntry]
@@ -56,15 +57,39 @@ struct ProfileView: View {
                 projectionSection
                 calorieGoalSection
                 accountSection
+
+                VStack(spacing: 8) {
+                    SAFLogo(size: 48)
+                    Text("SIMPLE AS F** CALORIE TRACKER")
+                        .font(.system(size: 10, weight: .bold, design: .default))
+                        .foregroundStyle(.secondary)
+                        .kerning(1.5)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.top, 8)
+                .padding(.bottom, 24)
             }
             .padding()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(.black)
         .scrollContentBackground(.hidden)
         .navigationTitle("Profile")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.body.weight(.semibold))
+                        .frame(width: 32, height: 32)
+                        .glassEffect(.regular.interactive(), in: .circle)
+                }
+            }
+        }
         .onTapGesture {
             commitWeight()
             #if os(iOS)

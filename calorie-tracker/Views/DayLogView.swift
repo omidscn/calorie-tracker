@@ -109,7 +109,6 @@ struct DayLogView: View {
                             } label: {
                                 FoodEntryRow(entry: entry)
                             }
-                            .buttonStyle(.plain)
                             .listRowBackground(Color.clear)
                             .listRowSeparator(.hidden)
                             .listRowInsets(EdgeInsets(top: 2, leading: 16, bottom: 2, trailing: 16))
@@ -177,14 +176,19 @@ struct DayLogView: View {
                 } label: {
                     Image(systemName: "chevron.left")
                         .font(.title3)
+                        .foregroundStyle(.blue)
                         .frame(width: 44, height: 44)
                         .glassEffect(.regular.interactive(), in: .circle)
                 }
+                .buttonStyle(.plain)
 
                 Spacer()
 
-                Text(selectedDate.displayString)
-                    .font(.headline)
+                VStack(spacing: 2) {
+                    SAFLogo(size: 24)
+                    Text(selectedDate.displayString)
+                        .font(.headline)
+                }
 
                 Spacer()
 
@@ -197,9 +201,11 @@ struct DayLogView: View {
                 } label: {
                     Image(systemName: "chevron.right")
                         .font(.title3)
+                        .foregroundStyle(.blue)
                         .frame(width: 44, height: 44)
                         .glassEffect(.regular.interactive(), in: .circle)
                 }
+                .buttonStyle(.plain)
             }
             .padding(.horizontal)
 
@@ -208,12 +214,12 @@ struct DayLogView: View {
             } label: {
                 VStack(spacing: 2) {
                     Text("\(remainingCalories) kcal")
-                        .font(.system(size: 32, weight: .bold, design: .rounded))
+                        .font(.system(size: 32, weight: .black, design: .default))
                         .monospacedDigit()
                         .contentTransition(.numericText())
 
                     Text("remains")
-                        .font(.system(size: 10, weight: .black, design: .rounded))
+                        .font(.system(size: 10, weight: .black, design: .default))
                         .foregroundStyle(.secondary)
 
                     Image(systemName: "chevron.down")
