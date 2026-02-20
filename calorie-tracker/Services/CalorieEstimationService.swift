@@ -10,59 +10,21 @@ final class CalorieEstimationService {
       }
       let accessToken = session.accessToken
 
+      let sanitizedInput = String(input.prefix(500))
+
       var request = URLRequest(url: URL(string: "https://api.omidsprivatehub.tech/v1/chat/completions")!)
       request.httpMethod = "POST"
       request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
       request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-      let schema: [String: Any] = [
-          "type": "object",
-          "properties": [
-              "reasoning": [
-                  "type": "string",
-                  "description": "Step-by-step reasoning: identify the food, estimate portion weight in grams, look up per-100g nutrition values, scale to actual quantity, and verify macro-calorie consistency."
-              ],
-              "foodName": [
-                  "type": "string",
-                  "description": "Clean, readable food name with portion context when helpful (e.g. 'Large Apple' or 'Slice of Pepperoni Pizza')."
-              ],
-              "servingDescription": [
-                  "type": "string",
-                  "description": "The assumed serving size with weight in grams (e.g. '1 medium apple (~182g)' or '2 large eggs (~100g)')."
-              ],
-              "totalCalories": [
-                  "type": "number",
-                  "description": "Total calories (kcal) for the FULL quantity, rounded to the nearest 5."
-              ],
-              "proteinGrams": [
-                  "type": "number",
-                  "description": "Total protein in grams for the full quantity, rounded to nearest 0.5g."
-              ],
-              "carbsGrams": [
-                  "type": "number",
-                  "description": "Total carbohydrates in grams for the full quantity, rounded to nearest 0.5g."
-              ],
-              "fatGrams": [
-                  "type": "number",
-                  "description": "Total fat in grams for the full quantity, rounded to nearest 0.5g."
-              ],
-              "quantity": [
-                  "type": "number",
-                  "description": "Number of servings or units parsed from the input. Defaults to 1.0 if not specified."
-              ]
-          ],
-          "required": ["reasoning", "foodName", "servingDescription", "totalCalories", "proteinGrams", "carbsGrams", "fatGrams", "quantity"],
-          "additionalProperties": false
-      ]
-
       let systemPrompt = """
-      You are a registered dietitian with deep knowledge of the USDA FoodData Central database. Your task is to provide accurate calorie and macronutrient estimates for foods described by users.
+      You are a registered dietitian with deep knowledge of international food composition databases (including USDA, EFSA, BLS, and other regional nutrition references). Your task is to provide accurate calorie and macronutrient estimates for foods from any country or cuisine.
 
       ## Estimation Process (follow these steps in order)
       1. Identify each food item and its preparation method from the user's input.
       2. Determine the quantity or serving size. If none is specified, use standard real-world portion sizes (see defaults below).
       3. Estimate the weight in grams for the described quantity.
-      4. Look up typical nutritional values per 100g using USDA reference data.
+      4. Look up typical nutritional values per 100g using the most appropriate regional nutrition reference for that food.
       5. Scale to the actual quantity and compute totals.
       6. Verify consistency: (protein × 4) + (carbs × 4) + (fat × 9) should be within ±10% of totalCalories. Adjust if needed.
 
@@ -93,6 +55,16 @@ final class CalorieEstimationService {
       - Round macronutrients to nearest 0.5g.
       - When uncertain, prefer the middle of the plausible range rather than underestimating.
       - For branded or restaurant items, use known published nutrition data when available.
+
+      ## Language
+      Always return `foodName` and `servingDescription` in the same language as the user's input. If the user writes in German, respond with German food names. If in French, use French names. Only use English when the input is in English.
+
+      ## Off-topic Input
+      If the input cannot be reasonably interpreted as a food, drink, or meal description, respond with exactly:
+      {"reasoning":"Input is not a food item.","foodName":"Unknown","servingDescription":"","totalCalories":0,"proteinGrams":0,"carbsGrams":0,"fatGrams":0,"quantity":0}
+
+      ## Output Format
+      Respond with raw JSON only. No markdown, no code fences, no explanation — just the JSON object.
       """
 
       let fewShotExamples: [[String: Any]] = [
@@ -102,7 +74,7 @@ final class CalorieEstimationService {
           ],
           [
               "role": "assistant",
-              "content": "{\"reasoning\":\"The user wants 3 apples. A medium apple weighs ~182g. Per USDA, a medium apple has about 95 kcal, 0.5g protein, 25g carbs, 0.3g fat. For 3 apples: 285 kcal, 1.5g protein, 75g carbs, 0.9g fat. Consistency check: (1.5×4)+(75×4)+(0.9×9) = 6+300+8.1 = 314.1. That's ~10% over 285, which is due to fiber calories not being fully absorbed. 285 kcal is the standard USDA value so I'll keep it.\",\"foodName\":\"Medium Apple\",\"servingDescription\":\"3 medium apples (~546g total)\",\"totalCalories\":285,\"proteinGrams\":1.5,\"carbsGrams\":75,\"fatGrams\":1,\"quantity\":3}"
+              "content": "{\"reasoning\":\"The user wants 3 apples. A medium apple weighs ~182g. Standard nutrition data shows a medium apple has about 95 kcal, 0.5g protein, 25g carbs, 0.3g fat. For 3 apples: 285 kcal, 1.5g protein, 75g carbs, 0.9g fat. Consistency check: (1.5×4)+(75×4)+(0.9×9) = 6+300+8.1 = 314.1. That's ~10% over 285, which is due to fiber calories not being fully absorbed. 285 kcal is the well-established reference value so I'll keep it.\",\"foodName\":\"Medium Apple\",\"servingDescription\":\"3 medium apples (~546g total)\",\"totalCalories\":285,\"proteinGrams\":1.5,\"carbsGrams\":75,\"fatGrams\":1,\"quantity\":3}"
           ],
           [
               "role": "user",
@@ -126,40 +98,31 @@ final class CalorieEstimationService {
           ["role": "system", "content": systemPrompt]
       ]
       messages.append(contentsOf: fewShotExamples)
-      messages.append(["role": "user", "content": input])
+      messages.append(["role": "user", "content": "Estimate calories for: \"\(sanitizedInput)\""])
 
       let body: [String: Any] = [
-          "seed": 42,
-          "messages": messages,
-          "response_format": [
-              "type": "json_schema",
-              "json_schema": [
-                  "name": "calorie_estimate",
-                  "strict": true,
-                  "schema": schema
-              ]
-          ]
+          "messages": messages
       ]
 
       let requestData = try JSONSerialization.data(withJSONObject: body)
       request.httpBody = requestData
 
       if let requestJSON = String(data: requestData, encoding: .utf8) {
-          print("📤 [OpenAI Request] POST /v1/chat/completions")
-          print("📤 [OpenAI Request] Body: \(requestJSON)")
+          print("📤 [Gemini Request] POST /v1/chat/completions")
+          print("📤 [Gemini Request] Body: \(requestJSON)")
       }
 
       let (data, response) = try await URLSession.shared.data(for: request)
 
       let rawResponse = String(data: data, encoding: .utf8) ?? "<unable to decode>"
-      print("📥 [OpenAI Response] Raw: \(rawResponse)")
+      print("📥 [Gemini Response] Raw: \(rawResponse)")
 
       guard let http = response as? HTTPURLResponse else {
-          print("❌ [OpenAI] Not an HTTP response")
+          print("❌ [Gemini] Not an HTTP response")
           throw CalorieEstimationError.networkError
       }
 
-      print("📥 [OpenAI Response] Status: \(http.statusCode)")
+      print("📥 [Gemini Response] Status: \(http.statusCode)")
 
       guard http.statusCode == 200 else {
           let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
@@ -181,19 +144,36 @@ final class CalorieEstimationService {
       }
 
       guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-            let choices = json["choices"] as? [[String: Any]],
-            let first = choices.first,
-            let message = first["message"] as? [String: Any],
-            let content = message["content"] as? String,
-            let contentData = content.data(using: .utf8) else {
-          print("❌ [OpenAI] Could not extract content from response")
+            let rawContent = json["text"] as? String else {
+          print("❌ [Gemini] Could not extract text from response")
           throw CalorieEstimationError.invalidResponse
       }
 
-      print("✅ [OpenAI] Parsed content: \(content)")
+      // Strip markdown code fences (```json ... ``` or ``` ... ```) if present
+      let trimmed = rawContent.trimmingCharacters(in: .whitespacesAndNewlines)
+      let content: String
+      if trimmed.hasPrefix("```") {
+          content = trimmed
+              .replacingOccurrences(of: "^```(?:json)?\\s*", with: "", options: .regularExpression)
+              .replacingOccurrences(of: "\\s*```$", with: "", options: .regularExpression)
+              .trimmingCharacters(in: .whitespacesAndNewlines)
+      } else {
+          content = trimmed
+      }
+
+      guard let contentData = content.data(using: .utf8) else {
+          print("❌ [Gemini] Could not encode content as UTF-8")
+          throw CalorieEstimationError.invalidResponse
+      }
+
+      print("✅ [Gemini] Parsed content: \(content)")
 
       let estimate = try JSONDecoder().decode(CalorieEstimate.self, from: contentData)
-      print("✅ [OpenAI] Decoded: \(estimate.foodName) — \(estimate.totalCalories) kcal (P:\(estimate.proteinGrams)g C:\(estimate.carbsGrams)g F:\(estimate.fatGrams)g) qty:\(estimate.quantity)")
+      print("✅ [Gemini] Decoded: \(estimate.foodName) — \(estimate.totalCalories) kcal (P:\(estimate.proteinGrams)g C:\(estimate.carbsGrams)g F:\(estimate.fatGrams)g) qty:\(estimate.quantity)")
+
+      if estimate.foodName == "Unknown" && estimate.totalCalories == 0 {
+          throw CalorieEstimationError.notFood
+      }
 
       return estimate
   }
@@ -205,6 +185,7 @@ enum CalorieEstimationError: LocalizedError {
   case apiError(String)
   case invalidResponse
   case rateLimited(String)
+  case notFood
 
   var errorDescription: String? {
       switch self {
@@ -213,11 +194,13 @@ enum CalorieEstimationError: LocalizedError {
       case .networkError:
           return "Network request failed. Check your connection."
       case .apiError(let message):
-          return "OpenAI error: \(message)"
+          return "API error: \(message)"
       case .invalidResponse:
           return "Could not parse the AI response."
       case .rateLimited(let message):
           return message
+      case .notFood:
+          return "That doesn't look like a food item. Try something like \"2 eggs\" or \"chicken sandwich\"."
       }
   }
 }

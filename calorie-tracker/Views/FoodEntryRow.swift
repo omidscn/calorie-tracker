@@ -33,6 +33,12 @@ struct FoodEntryRow: View {
                                     .font(.caption2)
                                     .foregroundStyle(.white.opacity(0.6))
                             }
+
+                            if entry.source == "search" {
+                                Image(systemName: "magnifyingglass")
+                                    .font(.caption2)
+                                    .foregroundStyle(.white.opacity(0.6))
+                            }
                         }
 
                         HStack(spacing: 4) {

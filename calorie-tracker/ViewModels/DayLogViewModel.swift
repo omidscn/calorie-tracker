@@ -74,7 +74,56 @@ final class DayLogViewModel {
         context.insert(entry)
     }
 
-    private static func combineDateWithCurrentTime(date: Date) -> Date {
+    func createEntriesFromMealBuilder(
+        _ items: [(product: BarcodeProduct, quantity: Double)],
+        date: Date,
+        mealType: MealType,
+        context: ModelContext
+    ) {
+        let timestamp = Self.combineDateWithCurrentTime(date: date)
+
+        for item in items {
+            let entry = FoodEntry(
+                rawInput: item.product.name,
+                foodName: item.product.name,
+                calories: Int(Double(item.product.calories) * item.quantity),
+                proteinGrams: item.product.proteinGrams.map { $0 * item.quantity },
+                carbsGrams: item.product.carbsGrams.map { $0 * item.quantity },
+                fatGrams: item.product.fatGrams.map { $0 * item.quantity },
+                quantity: item.quantity,
+                source: "search",
+                mealType: mealType,
+                timestamp: timestamp
+            )
+            context.insert(entry)
+        }
+    }
+
+    func createEntryFromScannedProduct(
+        _ product: BarcodeProduct,
+        quantity: Double,
+        barcode: String?,
+        date: Date,
+        mealType: MealType,
+        context: ModelContext
+    ) {
+        let entry = FoodEntry(
+            rawInput: product.name,
+            foodName: product.name,
+            calories: Int(Double(product.calories) * quantity),
+            proteinGrams: product.proteinGrams.map { $0 * quantity },
+            carbsGrams: product.carbsGrams.map { $0 * quantity },
+            fatGrams: product.fatGrams.map { $0 * quantity },
+            quantity: quantity,
+            source: "barcode",
+            mealType: mealType,
+            barcode: barcode,
+            timestamp: Self.combineDateWithCurrentTime(date: date)
+        )
+        context.insert(entry)
+    }
+
+    static func combineDateWithCurrentTime(date: Date) -> Date {
         let calendar = Calendar.current
         let now = Date.now
 

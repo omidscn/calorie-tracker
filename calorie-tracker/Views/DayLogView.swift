@@ -15,11 +15,15 @@ struct DayLogView: View {
     @State private var inputText = ""
     @State private var selectedMealType: MealType = MealType.defaultForCurrentTime()
     @AppStorage("aiEnabled") private var aiEnabled = true
-    @State private var isProcessing = false
+    @State private var processingMode: ProcessingMode = .none
     @State private var showBarcodeScanner = false
+    @State private var scannedProduct: BarcodeProduct? = nil
+    @State private var scannedBarcode: String? = nil
+    @State private var showBarcodeConfirmation = false
     @State private var selectedEntry: FoodEntry?
     @State private var errorMessage: String?
     @State private var showProfile = false
+    @State private var showMealBuilder = false
 
     private var todaysEntries: [FoodEntry] {
         allEntries.filter { $0.timestamp.isSameDay(as: selectedDate) }
@@ -43,37 +47,63 @@ struct DayLogView: View {
     @AppStorage("dailyCalorieGoal") private var dailyCalorieGoal: Int = 2000
 
     var body: some View {
-        NavigationStack {
-            mainContent
-                .sheet(item: $selectedEntry) { entry in
-                    EditEntrySheet(entry: entry)
-                        .presentationDetents([.medium])
-                }
-                .sheet(isPresented: $showProfile) {
-                    NavigationStack {
-                        ProfileView()
+        ZStack {
+            NavigationStack {
+                mainContent
+                    .sheet(item: $selectedEntry) { entry in
+                        EditEntrySheet(entry: entry)
+                            .presentationDetents([.medium])
                     }
-                    .presentationDetents([.large])
-                }
-                #if os(iOS)
-                .sheet(isPresented: $showBarcodeScanner) {
-                    BarcodeScannerView { barcode in
-                        showBarcodeScanner = false
-                        Task { await handleBarcode(barcode) }
+                    .sheet(isPresented: $showProfile) {
+                        NavigationStack {
+                            ProfileView()
+                        }
+                        .presentationDetents([.large])
                     }
-                }
-                #endif
-                .alert("Error", isPresented: Binding(
-                    get: { errorMessage != nil },
-                    set: { if !$0 { errorMessage = nil } }
-                )) {
-                    Button("OK") { errorMessage = nil }
-                } message: {
-                    Text(errorMessage ?? "")
-                }
-                #if os(iOS)
-                .toolbar(.hidden, for: .navigationBar)
-                #endif
+                    #if os(iOS)
+                    .sheet(isPresented: $showBarcodeScanner) {
+                        BarcodeScannerView { barcode in
+                            showBarcodeScanner = false
+                            Task { await handleBarcode(barcode) }
+                        }
+                    }
+                    .sheet(isPresented: $showBarcodeConfirmation) {
+                        if let product = scannedProduct {
+                            BarcodeConfirmationSheet(
+                                product: product,
+                                barcode: scannedBarcode,
+                                viewModel: viewModel,
+                                date: selectedDate,
+                                mealType: selectedMealType
+                            )
+                        }
+                    }
+                    .sheet(isPresented: $showMealBuilder) {
+                        MealBuilderView(
+                            viewModel: viewModel,
+                            date: selectedDate,
+                            mealType: selectedMealType
+                        )
+                        .presentationDetents([.large])
+                    }
+                    #endif
+                    .alert("Error", isPresented: Binding(
+                        get: { errorMessage != nil },
+                        set: { if !$0 { errorMessage = nil } }
+                    )) {
+                        Button("OK") { errorMessage = nil }
+                    } message: {
+                        Text(errorMessage ?? "")
+                    }
+                    #if os(iOS)
+                    .toolbar(.hidden, for: .navigationBar)
+                    #endif
+            }
+
+            // Sparkle particles rendered on top — visible regardless of List background
+            SparkleParticlesBackground()
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
         }
     }
 
@@ -81,7 +111,6 @@ struct DayLogView: View {
 
     private var mainContent: some View {
         VStack(spacing: 0) {
-            headerView
             entryListView
             EntryInputBar(
                 inputText: $inputText,
@@ -89,7 +118,8 @@ struct DayLogView: View {
                 aiEnabled: $aiEnabled,
                 onSubmit: { aiEnabled ? submitAIEntry() : submitManualEntry() },
                 onBarcodeTap: { showBarcodeScanner = true },
-                isProcessing: isProcessing
+                onMealBuilderTap: { showMealBuilder = true },
+                processingMode: processingMode
             )
             .padding(.horizontal)
             .padding(.bottom, 8)
@@ -147,6 +177,9 @@ struct DayLogView: View {
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
             .scrollDismissesKeyboard(.interactively)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                headerView
+            }
             #if os(iOS)
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
                 withAnimation(.easeOut(duration: 0.25)) {
@@ -184,11 +217,8 @@ struct DayLogView: View {
 
                 Spacer()
 
-                VStack(spacing: 2) {
-                    SAFLogo(size: 24)
-                    Text(selectedDate.displayString)
-                        .font(.headline)
-                }
+                Text(selectedDate.displayString)
+                    .font(.headline)
 
                 Spacer()
 
@@ -214,13 +244,9 @@ struct DayLogView: View {
             } label: {
                 VStack(spacing: 2) {
                     Text("\(remainingCalories) kcal")
-                        .font(.system(size: 32, weight: .black, design: .default))
+                        .font(.system(size: 32, weight: .black, design: .rounded))
                         .monospacedDigit()
                         .contentTransition(.numericText())
-
-                    Text("remains")
-                        .font(.system(size: 10, weight: .black, design: .default))
-                        .foregroundStyle(.secondary)
 
                     Image(systemName: "chevron.down")
                         .font(.caption2)
@@ -260,7 +286,9 @@ struct DayLogView: View {
         guard !text.isEmpty else { return }
 
         inputText = ""
-        isProcessing = true
+        withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
+            processingMode = .ai(text: text)
+        }
 
         Task {
             do {
@@ -274,7 +302,9 @@ struct DayLogView: View {
             } catch {
                 errorMessage = error.localizedDescription
             }
-            isProcessing = false
+            withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
+                processingMode = .none
+            }
         }
     }
 
@@ -322,19 +352,20 @@ struct DayLogView: View {
 
     #if os(iOS)
     private func handleBarcode(_ barcode: String) async {
-        isProcessing = true
+        withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
+            processingMode = .barcode
+        }
         do {
-            try await viewModel.createEntryFromBarcode(
-                barcode,
-                date: selectedDate,
-                mealType: selectedMealType,
-                context: modelContext,
-                foodLookupService: foodLookupService
-            )
+            let product = try await foodLookupService.lookupBarcode(barcode)
+            scannedProduct = product
+            scannedBarcode = barcode
+            showBarcodeConfirmation = true
         } catch {
             errorMessage = error.localizedDescription
         }
-        isProcessing = false
+        withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
+            processingMode = .none
+        }
     }
     #endif
 }

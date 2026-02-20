@@ -59,7 +59,7 @@ struct ProfileView: View {
                 accountSection
 
                 VStack(spacing: 8) {
-                    SAFLogo(size: 48)
+                    AppIcon(size: 48)
                     Text("SIMPLE AS F** CALORIE TRACKER")
                         .font(.system(size: 10, weight: .bold, design: .default))
                         .foregroundStyle(.secondary)

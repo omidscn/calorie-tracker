@@ -1,62 +1,175 @@
 import SwiftUI
 
-// MARK: - Brand Color
+// MARK: - Sparkle Shape
 
-extension Color {
-    static let safOrange = Color(red: 1.0, green: 107.0 / 255.0, blue: 53.0 / 255.0)
+/// A 4-pointed ✦ star with concave bezier sides, fitting its bounding rect.
+struct SparkleShape: Shape {
+    var pull: Double = 0.30
+
+    var animatableData: Double {
+        get { pull }
+        set { pull = newValue }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        let cx = rect.midX
+        let cy = rect.midY
+        let s  = min(rect.width, rect.height) / 2
+
+        let tipR   = s * 0.940
+        let waistR = s * 0.303
+
+        var verts: [CGPoint] = []
+        for i in 0..<8 {
+            let ang = CGFloat(i) * .pi / 4
+            let r   = i % 2 == 0 ? tipR : waistR
+            verts.append(CGPoint(
+                x: cx + r * sin(ang),
+                y: cy - r * cos(ang)
+            ))
+        }
+
+        var path = Path()
+        for i in 0..<8 {
+            let p0 = verts[i]
+            let p3 = verts[(i + 1) % 8]
+
+            let lcp1 = CGPoint(x: p0.x * 0.65 + p3.x * 0.35,
+                               y: p0.y * 0.65 + p3.y * 0.35)
+            let lcp2 = CGPoint(x: p0.x * 0.35 + p3.x * 0.65,
+                               y: p0.y * 0.35 + p3.y * 0.65)
+
+            let f = CGFloat(pull)
+            let cp1 = CGPoint(x: lcp1.x + (cx - lcp1.x) * f,
+                              y: lcp1.y + (cy - lcp1.y) * f)
+            let cp2 = CGPoint(x: lcp2.x + (cx - lcp2.x) * f,
+                              y: lcp2.y + (cy - lcp2.y) * f)
+
+            if i == 0 { path.move(to: p0) }
+            path.addCurve(to: p3, control1: cp1, control2: cp2)
+        }
+        path.closeSubpath()
+        return path
+    }
 }
 
-// MARK: - SAF Logo (vector, renders at any size)
+// MARK: - Sparkle Particles Background
 
-struct SAFLogo: View {
-    var size: CGFloat = 80
+/// Floating ✦ particles + a subtle blue radial glow confined to the top
+/// portion of the screen, fading to transparent at the midpoint.
+/// Renders **in front of** content at zero hit-testing cost.
+struct SparkleParticlesBackground: View {
+
+    private struct Particle: Identifiable {
+        let id: UUID
+        var x, y, size, opacity, rotation: CGFloat
+    }
+
+    @State private var particles: [Particle] = []
 
     var body: some View {
-        Canvas { context, canvas in
-            let s = canvas.width
+        GeometryReader { geo in
+            let w = geo.size.width
+            let h = geo.size.height
+            let spawnH = h * 0.48
 
-            // Proportions from the 1024×1024 master design
-            let bar = s * 76.0 / 1024.0
-            let lw  = s * 250.0 / 1024.0
-            let lh  = s * 460.0 / 1024.0
-            let gap = s * 40.0 / 1024.0
+            ZStack {
+                // ── Subtle blue radial glow (same as login page) ───────────
+                RadialGradient(
+                    colors: [
+                        Color(red: 0.10, green: 0.18, blue: 0.55).opacity(0.38),
+                        .clear
+                    ],
+                    center: UnitPoint(x: 0.5, y: 0.0),
+                    startRadius: 0,
+                    endRadius: h * 0.55
+                )
 
-            let totalW = lw * 3 + gap * 2
-            let x0 = (s - totalW) / 2
-            let y0 = (s - lh) / 2
-
-            func fill(_ rect: CGRect, _ color: Color) {
-                context.fill(Path(rect), with: .color(color))
+                // ── Sparkle particles ──────────────────────────────────────
+                ForEach(particles) { p in
+                    SparkleShape()
+                        .fill(Color.white.opacity(p.opacity))
+                        .frame(width: p.size, height: p.size)
+                        .rotationEffect(.degrees(p.rotation))
+                        .position(x: p.x, y: p.y)
+                }
             }
+            // Fade everything out before the midpoint
+            .mask(
+                LinearGradient(
+                    stops: [
+                        .init(color: .black, location: 0.0),
+                        .init(color: .black, location: 0.30),
+                        .init(color: .clear,  location: 0.58),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .allowsHitTesting(false)
+            .task {
+                for _ in 0..<6 { spawn(w: w, maxY: spawnH) }
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(0.85))
+                    if particles.count < 16 { spawn(w: w, maxY: spawnH) }
+                }
+            }
+        }
+    }
 
-            let w = Color.white
-            let a = Color.safOrange
+    private func spawn(w: CGFloat, maxY: CGFloat) {
+        let id = UUID()
+        particles.append(Particle(
+            id: id,
+            x: .random(in: 16...(w - 16)),
+            y: .random(in: 8...maxY),
+            size: .random(in: 5...13),
+            opacity: 0,
+            rotation: .random(in: 0..<360)
+        ))
+        let alpha    = CGFloat.random(in: 0.08...0.22)
+        let lifetime = Double.random(in: 1.8...3.6)
 
-            // ── S ──
-            let sx = x0
-            fill(CGRect(x: sx, y: y0, width: lw, height: bar), w)
-            fill(CGRect(x: sx, y: y0, width: bar, height: lh / 2 + bar / 2), w)
-            fill(CGRect(x: sx, y: y0 + lh / 2 - bar / 2, width: lw, height: bar), w)
-            fill(CGRect(x: sx + lw - bar, y: y0 + lh / 2 - bar / 2, width: bar, height: lh / 2 + bar / 2), w)
-            fill(CGRect(x: sx, y: y0 + lh - bar, width: lw, height: bar), w)
+        withAnimation(.easeIn(duration: 0.45)) { update(id) { $0.opacity = alpha } }
+        Task {
+            try? await Task.sleep(for: .seconds(lifetime))
+            withAnimation(.easeOut(duration: 0.55)) { update(id) { $0.opacity = 0 } }
+            try? await Task.sleep(for: .seconds(0.6))
+            particles.removeAll { $0.id == id }
+        }
+    }
 
-            // ── A ──
-            let ax = x0 + lw + gap
-            fill(CGRect(x: ax, y: y0, width: lw, height: bar), w)              // top
-            fill(CGRect(x: ax, y: y0, width: bar, height: lh), w)              // left leg
-            fill(CGRect(x: ax + lw - bar, y: y0, width: bar, height: lh), w)   // right leg
-            fill(CGRect(x: ax + bar, y: y0 + lh / 2 - bar / 2,
-                         width: lw - bar * 2, height: bar), a)                 // orange crossbar
+    private func update(_ id: UUID, mutation: (inout Particle) -> Void) {
+        guard let i = particles.firstIndex(where: { $0.id == id }) else { return }
+        mutation(&particles[i])
+    }
+}
 
-            // ── F ──
-            let fx = x0 + (lw + gap) * 2
-            fill(CGRect(x: fx, y: y0, width: bar, height: lh), w)              // stem
-            fill(CGRect(x: fx, y: y0, width: lw, height: bar), w)              // top
-            fill(CGRect(x: fx, y: y0 + lh / 2 - bar / 2,
-                         width: lw * 0.72, height: bar), w)                    // middle (shorter)
+// MARK: - App Icon View
+
+struct AppIcon: View {
+    var size: CGFloat = 80
+
+    private var sparkleSize: CGFloat { size * 0.68 }
+
+    var body: some View {
+        ZStack {
+            RadialGradient(
+                colors: [
+                    Color(red: 30/255, green: 79/255, blue: 216/255),
+                    Color(red: 9/255,  green: 21/255, blue: 64/255)
+                ],
+                center: .center,
+                startRadius: 0,
+                endRadius: size * 0.68
+            )
+
+            SparkleShape()
+                .fill(.white)
+                .shadow(color: .white.opacity(0.50), radius: size * 0.07)
+                .frame(width: sparkleSize, height: sparkleSize)
         }
         .frame(width: size, height: size)
-        .background(Color(white: 0.067))
         .clipShape(RoundedRectangle(cornerRadius: size * 0.22, style: .continuous))
     }
 }
