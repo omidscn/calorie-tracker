@@ -107,22 +107,30 @@ final class CalorieEstimationService {
       let requestData = try JSONSerialization.data(withJSONObject: body)
       request.httpBody = requestData
 
+      #if DEBUG
       if let requestJSON = String(data: requestData, encoding: .utf8) {
           print("📤 [Gemini Request] POST /v1/chat/completions")
           print("📤 [Gemini Request] Body: \(requestJSON)")
       }
+      #endif
 
       let (data, response) = try await URLSession.shared.data(for: request)
 
+      #if DEBUG
       let rawResponse = String(data: data, encoding: .utf8) ?? "<unable to decode>"
       print("📥 [Gemini Response] Raw: \(rawResponse)")
+      #endif
 
       guard let http = response as? HTTPURLResponse else {
+          #if DEBUG
           print("❌ [Gemini] Not an HTTP response")
+          #endif
           throw CalorieEstimationError.networkError
       }
 
+      #if DEBUG
       print("📥 [Gemini Response] Status: \(http.statusCode)")
+      #endif
 
       guard http.statusCode == 200 else {
           let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
@@ -135,7 +143,9 @@ final class CalorieEstimationService {
           } else {
               message = "HTTP \(http.statusCode)"
           }
+          #if DEBUG
           print("❌ [API] Error: \(message)")
+          #endif
 
           if http.statusCode == 429 {
               throw CalorieEstimationError.rateLimited(message)
@@ -145,7 +155,9 @@ final class CalorieEstimationService {
 
       guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
             let rawContent = json["text"] as? String else {
+          #if DEBUG
           print("❌ [Gemini] Could not extract text from response")
+          #endif
           throw CalorieEstimationError.invalidResponse
       }
 
@@ -162,14 +174,20 @@ final class CalorieEstimationService {
       }
 
       guard let contentData = content.data(using: .utf8) else {
+          #if DEBUG
           print("❌ [Gemini] Could not encode content as UTF-8")
+          #endif
           throw CalorieEstimationError.invalidResponse
       }
 
+      #if DEBUG
       print("✅ [Gemini] Parsed content: \(content)")
+      #endif
 
       let estimate = try JSONDecoder().decode(CalorieEstimate.self, from: contentData)
+      #if DEBUG
       print("✅ [Gemini] Decoded: \(estimate.foodName) — \(estimate.totalCalories) kcal (P:\(estimate.proteinGrams)g C:\(estimate.carbsGrams)g F:\(estimate.fatGrams)g) qty:\(estimate.quantity)")
+      #endif
 
       if estimate.foodName == "Unknown" && estimate.totalCalories == 0 {
           throw CalorieEstimationError.notFood

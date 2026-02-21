@@ -7,7 +7,6 @@ struct ProfileView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \WeightEntry.timestamp, order: .reverse) private var weightEntries: [WeightEntry]
-    @Query(sort: \FoodEntry.timestamp, order: .reverse) private var allFoodEntries: [FoodEntry]
 
     @AppStorage("dailyCalorieGoal") private var dailyCalorieGoal: Int = 2000
     @AppStorage("userBiologicalSex") private var userBiologicalSexRaw: String = "male"
@@ -44,69 +43,56 @@ struct ProfileView: View {
         TDEECalculator.weeklyWeightChangeKg(dailyCalories: dailyCalorieGoal, tdee: tdee)
     }
 
-    private var weeksToGoal: Int? {
-        TDEECalculator.weeksToTarget(currentKg: currentWeightKg, targetKg: userTargetWeightKg, weeklyChangeKg: weeklyChange)
-    }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 24) {
-                weightSection
-                weightChartSection
-                streakSection
-                projectionSection
-                calorieGoalSection
-                accountSection
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 24) {
+                    weightSection
+                    weightChartSection
+                    calorieGoalSection
+                    accountSection
 
-                VStack(spacing: 8) {
-                    AppIcon(size: 48)
                     Text("SIMPLE AS F** CALORIE TRACKER")
                         .font(.system(size: 10, weight: .bold, design: .default))
                         .foregroundStyle(.secondary)
                         .kerning(1.5)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 8)
+                        .padding(.bottom, 24)
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.top, 8)
-                .padding(.bottom, 24)
+                .padding()
             }
-            .padding()
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(.black)
-        .scrollContentBackground(.hidden)
-        .navigationTitle("Profile")
-        #if os(iOS)
-        .navigationBarTitleDisplayMode(.inline)
-        #endif
-        .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button {
-                    dismiss()
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.body.weight(.semibold))
-                        .frame(width: 32, height: 32)
-                        .glassEffect(.regular.interactive(), in: .circle)
-                }
-            }
-        }
-        .onTapGesture {
-            commitWeight()
+            .navigationTitle("Profile")
             #if os(iOS)
-            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+            .navigationBarTitleDisplayMode(.inline)
             #endif
-        }
-        .sheet(isPresented: $showRecalculate) {
-            RecalculateView()
-        }
-        .onChange(of: showRecalculate) {
-            if !showRecalculate {
-                sliderCalories = Double(dailyCalorieGoal)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
             }
-        }
-        .onAppear {
-            sliderCalories = Double(dailyCalorieGoal)
-            weightValue = currentWeightKg
+            .onTapGesture {
+                commitWeight()
+                #if os(iOS)
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                #endif
+            }
+            .sheet(isPresented: $showRecalculate) {
+                RecalculateView()
+                    .presentationDetents([.fraction(0.9)])
+            }
+            .onChange(of: showRecalculate) {
+                if !showRecalculate {
+                    sliderCalories = Double(dailyCalorieGoal)
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .containerBackground(.clear, for: .navigation)
+            .onAppear {
+                sliderCalories = Double(dailyCalorieGoal)
+                weightValue = currentWeightKg
+            }
         }
     }
 
@@ -372,288 +358,6 @@ struct ProfileView: View {
         .glassEffect(.regular, in: .rect(cornerRadius: 20))
     }
 
-    // MARK: - Calorie Streak (Contribution Graph)
-
-    private var streakSection: some View {
-        let calendar = Calendar.current
-        let today = calendar.startOfDay(for: .now)
-        let totalWeeks = 12
-        let totalDays = totalWeeks * 7
-
-        // Build lookup of daily calories
-        let caloriesByDay: [Date: Int] = {
-            var dict: [Date: Int] = [:]
-            for entry in allFoodEntries {
-                let day = calendar.startOfDay(for: entry.timestamp)
-                dict[day, default: 0] += entry.calories
-            }
-            return dict
-        }()
-
-        // Build grid: 7 rows (Mon-Sun) x 12 columns (weeks)
-        // Find the start: go back totalDays from today, then align to Monday
-        let rawStart = calendar.date(byAdding: .day, value: -(totalDays - 1), to: today)!
-        let weekday = calendar.component(.weekday, from: rawStart)
-        // weekday: 1=Sun, 2=Mon, ...
-        let mondayOffset = weekday == 1 ? -6 : (2 - weekday)
-        let gridStart = calendar.date(byAdding: .day, value: mondayOffset, to: rawStart)!
-
-        let gridColumns = ((calendar.dateComponents([.day], from: gridStart, to: today).day ?? 0) + 7) / 7
-
-        // Count streak and stats
-        let daysOnGoal = caloriesByDay.values.filter { $0 > 0 && $0 <= dailyCalorieGoal }.count
-        let daysTracked = caloriesByDay.values.filter { $0 > 0 }.count
-
-        return VStack(spacing: 12) {
-            HStack {
-                Text("Calorie Streak")
-                    .font(.headline)
-                Spacer()
-
-                if daysTracked > 0 {
-                    Text("\(daysOnGoal)/\(daysTracked) days on goal")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            // Month labels
-            HStack(spacing: 0) {
-                // Spacer for day labels
-                Color.clear.frame(width: 22)
-
-                let monthLabels = buildMonthLabels(gridStart: gridStart, columns: gridColumns, calendar: calendar)
-                ForEach(monthLabels, id: \.offset) { label in
-                    if label.offset > 0 {
-                        Spacer().frame(minWidth: 0)
-                    }
-                    Text(label.name)
-                        .font(.system(size: 9))
-                        .foregroundStyle(.tertiary)
-                    if label.offset < monthLabels.count - 1 {
-                        Spacer().frame(minWidth: 0)
-                    }
-                }
-                Spacer()
-            }
-
-            HStack(alignment: .top, spacing: 3) {
-                // Day-of-week labels
-                VStack(spacing: 3) {
-                    ForEach(0..<7, id: \.self) { row in
-                        if row == 0 || row == 2 || row == 4 || row == 6 {
-                            Text(shortDayName(row))
-                                .font(.system(size: 9))
-                                .foregroundStyle(.tertiary)
-                                .frame(width: 18, height: 12)
-                        } else {
-                            Color.clear.frame(width: 18, height: 12)
-                        }
-                    }
-                }
-
-                // Grid of cells
-                HStack(spacing: 3) {
-                    ForEach(0..<gridColumns, id: \.self) { col in
-                        VStack(spacing: 3) {
-                            ForEach(0..<7, id: \.self) { row in
-                                let dayOffset = col * 7 + row
-                                let date = calendar.date(byAdding: .day, value: dayOffset, to: gridStart)!
-                                let cals = caloriesByDay[calendar.startOfDay(for: date)]
-                                let isFuture = date > today
-
-                                RoundedRectangle(cornerRadius: 2.5)
-                                    .fill(cellColor(calories: cals, goal: dailyCalorieGoal, isFuture: isFuture))
-                                    .frame(height: 12)
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Legend
-            HStack(spacing: 4) {
-                Spacer()
-                Text("Less")
-                    .font(.system(size: 9))
-                    .foregroundStyle(.tertiary)
-
-                ForEach(legendColors, id: \.self) { color in
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(color)
-                        .frame(width: 10, height: 10)
-                }
-
-                Text("More")
-                    .font(.system(size: 9))
-                    .foregroundStyle(.tertiary)
-            }
-        }
-        .padding()
-        .glassEffect(.regular, in: .rect(cornerRadius: 20))
-    }
-
-    private var legendColors: [Color] {
-        [
-            .secondary.opacity(0.15),
-            .red.opacity(0.6),
-            .orange.opacity(0.6),
-            .green.opacity(0.35),
-            .green.opacity(0.7)
-        ]
-    }
-
-    private func cellColor(calories: Int?, goal: Int, isFuture: Bool) -> Color {
-        if isFuture { return .secondary.opacity(0.06) }
-        guard let cals = calories, cals > 0 else { return .secondary.opacity(0.15) }
-
-        let ratio = Double(cals) / Double(goal)
-        if ratio <= 0.75 {
-            return .green.opacity(0.35) // well under
-        } else if ratio <= 1.0 {
-            return .green.opacity(0.7) // on target
-        } else if ratio <= 1.15 {
-            return .orange.opacity(0.6) // slightly over
-        } else {
-            return .red.opacity(0.6) // significantly over
-        }
-    }
-
-    private func shortDayName(_ row: Int) -> String {
-        // Mon=0, Tue=1, ..., Sun=6
-        let names = ["M", "T", "W", "T", "F", "S", "S"]
-        return names[row]
-    }
-
-    private struct MonthLabel: Identifiable {
-        let name: String
-        let offset: Int
-        var id: Int { offset }
-    }
-
-    private func buildMonthLabels(gridStart: Date, columns: Int, calendar: Calendar) -> [MonthLabel] {
-        var labels: [MonthLabel] = []
-        var lastMonth = -1
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMM"
-
-        for col in 0..<columns {
-            let date = calendar.date(byAdding: .day, value: col * 7, to: gridStart)!
-            let month = calendar.component(.month, from: date)
-            if month != lastMonth {
-                labels.append(MonthLabel(name: formatter.string(from: date), offset: col))
-                lastMonth = month
-            }
-        }
-        return labels
-    }
-
-    // MARK: - Weight Projection
-
-    private var projectionSection: some View {
-        VStack(spacing: 20) {
-            HStack {
-                Text("Projection")
-                    .font(.headline)
-                Spacer()
-            }
-
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Current")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text(String(format: "%.1f", currentWeightKg))
-                        .font(.system(size: 34, weight: .bold, design: .rounded))
-                        .monospacedDigit()
-                    Text("kg")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                VStack(spacing: 6) {
-                    let gaining = weeklyChange > 0.01
-                    let losing = weeklyChange < -0.01
-                    Image(systemName: losing || gaining ? "arrow.right" : "equal")
-                        .font(.title2)
-                        .foregroundStyle(.tertiary)
-
-                    if let weeks = weeksToGoal {
-                        Text(TDEECalculator.formatDuration(weeks: weeks))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else if abs(currentWeightKg - userTargetWeightKg) < 0.5 {
-                        Text("At goal!")
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(.green)
-                    } else {
-                        Text("Adjust goal")
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
-                    }
-                }
-
-                Spacer()
-
-                VStack(alignment: .trailing, spacing: 4) {
-                    Text("Target")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text(String(format: "%.1f", userTargetWeightKg))
-                        .font(.system(size: 34, weight: .bold, design: .rounded))
-                        .monospacedDigit()
-                    Text("kg")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            if let weeks = weeksToGoal {
-                let targetDate = Calendar.current.date(byAdding: .weekOfYear, value: weeks, to: .now)!
-                HStack(spacing: 6) {
-                    Image(systemName: "calendar")
-                    Text("Estimated: \(targetDate.formatted(.dateTime.month(.wide).year()))")
-                        .font(.subheadline)
-                }
-                .foregroundStyle(.secondary)
-            } else if abs(currentWeightKg - userTargetWeightKg) < 0.5 {
-                HStack(spacing: 6) {
-                    Image(systemName: "checkmark.circle.fill")
-                    Text("You're at your goal weight!")
-                        .font(.subheadline)
-                }
-                .foregroundStyle(.green)
-            }
-
-            // Warning for extreme deficit/surplus
-            let weeklyKg = weeklyChange
-            if weeklyKg < -1.0 {
-                HStack(spacing: 6) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.yellow)
-                    Text("Losing more than 1 kg/week may be unsustainable")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(10)
-                .glassEffect(.regular, in: .rect(cornerRadius: 10))
-            } else if weeklyKg > 1.0 {
-                HStack(spacing: 6) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.yellow)
-                    Text("Gaining more than 1 kg/week may lead to excess fat gain")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(10)
-                .glassEffect(.regular, in: .rect(cornerRadius: 10))
-            }
-        }
-        .padding()
-        .glassEffect(.regular, in: .rect(cornerRadius: 20))
-    }
 
     // MARK: - Calorie Goal
 
@@ -663,6 +367,15 @@ struct ProfileView: View {
                 Text("Daily Calorie Goal")
                     .font(.headline)
                 Spacer()
+                Button {
+                    showRecalculate = true
+                } label: {
+                    Text("Recalculate")
+                        .font(.subheadline.weight(.medium))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .glassEffect(.regular.interactive(), in: .capsule)
+                }
             }
 
             Text("\(dailyCalorieGoal)")
@@ -702,43 +415,31 @@ struct ProfileView: View {
             }
 
             let deficit = Int(tdee.rounded()) - dailyCalorieGoal
-            HStack(spacing: 6) {
-                Image(systemName: deficit > 0 ? "arrow.down.right" : deficit < 0 ? "arrow.up.right" : "arrow.right")
-                Text(deficit > 0
-                     ? "\(deficit) kcal deficit"
-                     : deficit < 0
-                     ? "\(abs(deficit)) kcal surplus"
-                     : "At maintenance")
-                    .font(.subheadline)
-            }
-            .foregroundStyle(deficit > 0 ? .green : deficit < 0 ? .orange : .secondary)
-
             let weeklyKg = weeklyChange
-            HStack(spacing: 6) {
-                Image(systemName: "scalemass")
+            HStack(spacing: 0) {
+                HStack(spacing: 6) {
+                    Image(systemName: deficit > 0 ? "arrow.down.right" : deficit < 0 ? "arrow.up.right" : "arrow.right")
+                    Text(deficit > 0
+                         ? "\(deficit) kcal deficit"
+                         : deficit < 0
+                         ? "\(abs(deficit)) kcal surplus"
+                         : "At maintenance")
+                        .font(.subheadline)
+                }
+                .foregroundStyle(deficit > 0 ? .green : deficit < 0 ? .orange : .secondary)
+
+                Spacer()
+
                 if abs(weeklyKg) < 0.05 {
                     Text("Weight stable")
                         .font(.subheadline)
+                        .foregroundStyle(.secondary)
                 } else {
                     Text(String(format: "%+.2f kg / week", weeklyKg))
                         .font(.subheadline.monospacedDigit())
+                        .foregroundStyle(.secondary)
                 }
             }
-            .foregroundStyle(.secondary)
-
-            Button {
-                showRecalculate = true
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "arrow.triangle.2.circlepath")
-                    Text("Recalculate from scratch")
-                }
-                .font(.subheadline.weight(.medium))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
-                .glassEffect(.regular.interactive(), in: .capsule)
-            }
-            .padding(.top, 4)
         }
         .padding()
         .glassEffect(.regular, in: .rect(cornerRadius: 20))

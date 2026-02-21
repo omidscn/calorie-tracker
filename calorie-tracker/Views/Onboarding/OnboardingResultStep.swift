@@ -22,6 +22,11 @@ struct OnboardingResultStep: View {
         TDEECalculator.calculateDailyCalorieGoal(sex: sex, weightKg: weightKg, heightCm: heightCm, age: age, activity: activityLevel, goal: weightGoal)
     }
 
+    private var sexMinimum: Double { sex == .male ? 1500 : 1200 }
+    private var safeFloor: Double { max(sexMinimum, bmr) }
+    private var adjustedCalories: Double { tdee + Double(weightGoal.calorieAdjustment) }
+    private var isFloorApplied: Bool { weightGoal != .maintain && safeFloor > adjustedCalories }
+
     var body: some View {
         ScrollView {
             VStack(spacing: 24) {
@@ -38,19 +43,49 @@ struct OnboardingResultStep: View {
                     .font(.title3)
                     .foregroundStyle(.secondary)
 
+                Text("Calculated using the Mifflin-St Jeor formula — a clinically validated method used by nutritionists worldwide.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+
                 // Breakdown
                 VStack(spacing: 12) {
-                    breakdownRow(label: "Base Metabolic Rate", value: "\(Int(bmr.rounded())) kcal")
+                    breakdownRow(
+                        label: "Basal Metabolic Rate",
+                        subtitle: "Calories your body burns at complete rest",
+                        value: "\(Int(bmr.rounded())) kcal"
+                    )
                     Divider()
-                    breakdownRow(label: "Activity (\(activityLevel.displayName))", value: "× \(String(format: "%.3g", activityLevel.multiplier))")
+                    breakdownRow(
+                        label: "Activity (\(activityLevel.displayName))",
+                        subtitle: activityLevel.description,
+                        value: "× \(String(format: "%.3g", activityLevel.multiplier))"
+                    )
                     Divider()
-                    breakdownRow(label: "TDEE", value: "\(Int(tdee.rounded())) kcal")
+                    breakdownRow(
+                        label: "TDEE",
+                        subtitle: "Total daily calories burned including activity",
+                        value: "\(Int(tdee.rounded())) kcal"
+                    )
 
                     if weightGoal != .maintain {
                         Divider()
                         breakdownRow(
-                            label: "Goal (\(weightGoal.displayName))",
+                            label: "Goal adjustment",
+                            subtitle: weightGoal == .lose ? "~0.5 kg/week deficit" : "~0.5 kg/week surplus",
                             value: "\(weightGoal.calorieAdjustment > 0 ? "+" : "")\(weightGoal.calorieAdjustment) kcal"
+                        )
+                    }
+
+                    if isFloorApplied {
+                        Divider()
+                        breakdownRow(
+                            label: "Safety minimum applied",
+                            subtitle: safeFloor == bmr
+                                ? "Never eat below your own BMR without medical supervision"
+                                : "Recommended minimum for \(sex == .male ? "men" : "women")",
+                            value: "\(Int(safeFloor.rounded())) kcal",
+                            valueColor: .orange
                         )
                     }
 
@@ -81,14 +116,22 @@ struct OnboardingResultStep: View {
         }
     }
 
-    private func breakdownRow(label: String, value: String) -> some View {
-        HStack {
-            Text(label)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+    private func breakdownRow(label: String, subtitle: String? = nil, value: String, valueColor: Color = .primary) -> some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(label)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            }
             Spacer()
             Text(value)
                 .font(.subheadline.monospacedDigit())
+                .foregroundStyle(valueColor)
         }
     }
 }

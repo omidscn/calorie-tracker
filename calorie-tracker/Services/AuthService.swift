@@ -44,6 +44,15 @@ final class AuthService {
         }
     }
 
+    func signInWithEmail(email: String, password: String) async {
+        errorMessage = nil
+        do {
+            try await supabase.auth.signIn(email: email, password: password)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     func signOut() async {
         do {
             try await supabase.auth.signOut()

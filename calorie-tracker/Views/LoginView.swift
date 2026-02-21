@@ -70,6 +70,13 @@ struct LoginView: View {
 
     // ── Background particles ───────────────────────────────────────────────
     @State private var particles: [SparkleParticle] = []
+    @State private var particleTimer: Timer?
+
+    // ── Hidden reviewer login ──────────────────────────────────────────────
+    @State private var logoTapCount = 0
+    @State private var showHiddenLogin = false
+    @State private var reviewEmail = ""
+    @State private var reviewPassword = ""
 
     var body: some View {
         GeometryReader { geo in
@@ -81,7 +88,7 @@ struct LoginView: View {
                 // Soft radial glow behind the icon
                 RadialGradient(
                     colors: [
-                        Color(red: 0.10, green: 0.18, blue: 0.55).opacity(0.40),
+                        Color(red: 0.18, green: 0.80, blue: 0.35).opacity(0.35),
                         .clear
                     ],
                     center: .center,
@@ -112,8 +119,8 @@ struct LoginView: View {
                             .fill(
                                 RadialGradient(
                                     colors: [
-                                        Color(red: 0.18, green: 0.40, blue: 1.0),
-                                        Color(red: 0.08, green: 0.20, blue: 0.72)
+                                        Color(red: 0.30, green: 0.85, blue: 0.45),
+                                        Color(red: 0.10, green: 0.60, blue: 0.25)
                                     ],
                                     center: .center,
                                     startRadius: 0,
@@ -137,12 +144,21 @@ struct LoginView: View {
                             .rotationEffect(.degrees(iconRotation))
                             .opacity(iconOpacity)
                             .shadow(
-                                color: Color(red: 0.15, green: 0.35, blue: 1.0)
+                                color: Color(red: 0.30, green: 0.85, blue: 0.45)
                                     .opacity(glowOpacity),
                                 radius: glowRadius
                             )
                     }
                     .padding(.bottom, 40)
+                    .onTapGesture {
+                        logoTapCount += 1
+                        if logoTapCount >= 10 && !showHiddenLogin {
+                            withAnimation(.spring(response: 0.45, dampingFraction: 0.72)) {
+                                showHiddenLogin = true
+                            }
+                            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                        }
+                    }
 
                     // Title & subtitle
                     VStack(spacing: 8) {
@@ -169,6 +185,14 @@ struct LoginView: View {
                             .padding(.bottom, 10)
                     }
 
+                    // Hidden reviewer email/password login (10-tap Easter egg)
+                    if showHiddenLogin {
+                        HiddenReviewerLogin(authService: authService)
+                            .padding(.horizontal, 32)
+                            .padding(.bottom, 12)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
+
                     // Liquid glass Apple button
                     LiquidGlassAppleButton(authService: authService)
                         .padding(.horizontal, 32)
@@ -182,6 +206,11 @@ struct LoginView: View {
             .onAppear {
                 runIntroAnimation()
                 scheduleParticles(in: geo.size)
+            }
+            .onDisappear {
+                particleTimer?.invalidate()
+                particleTimer = nil
+                particles = []
             }
         }
     }
@@ -237,7 +266,7 @@ struct LoginView: View {
         for _ in 0..<5 { spawnParticle(in: size) }
 
         // Add one every ~0.9 s, keep it lightweight
-        Timer.scheduledTimer(withTimeInterval: 0.9, repeats: true) { _ in
+        particleTimer = Timer.scheduledTimer(withTimeInterval: 0.9, repeats: true) { _ in
             guard particles.count < 14 else { return }
             spawnParticle(in: size)
         }
@@ -368,6 +397,74 @@ private struct LiquidGlassAppleButton: View {
         let inputData = Data(input.utf8)
         let hashedData = SHA256.hash(data: inputData)
         return hashedData.compactMap { String(format: "%02x", $0) }.joined()
+    }
+}
+
+// MARK: - Hidden Reviewer Login
+
+private struct HiddenReviewerLogin: View {
+    let authService: AuthService
+
+    @State private var email = ""
+    @State private var password = ""
+    @FocusState private var focusedField: Field?
+
+    private enum Field { case email, password }
+
+    var body: some View {
+        VStack(spacing: 10) {
+            TextField("", text: $email,
+                      prompt: Text("Email").foregroundColor(.white.opacity(0.45)))
+                .foregroundStyle(.white)
+                .textContentType(.emailAddress)
+                .keyboardType(.emailAddress)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+                .focused($focusedField, equals: .email)
+                .submitLabel(.next)
+                .onSubmit { focusedField = .password }
+                .padding(.horizontal, 16)
+                .frame(height: 48)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .strokeBorder(.white.opacity(0.18), lineWidth: 1)
+                )
+
+            SecureField("", text: $password,
+                        prompt: Text("Password").foregroundColor(.white.opacity(0.45)))
+                .foregroundStyle(.white)
+                .textContentType(.password)
+                .focused($focusedField, equals: .password)
+                .submitLabel(.go)
+                .onSubmit { signIn() }
+                .padding(.horizontal, 16)
+                .frame(height: 48)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .strokeBorder(.white.opacity(0.18), lineWidth: 1)
+                )
+
+            Button(action: signIn) {
+                Text("Sign In")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 48)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .strokeBorder(.white.opacity(0.18), lineWidth: 1)
+                    )
+            }
+            .buttonStyle(GlassPressStyle())
+        }
+    }
+
+    private func signIn() {
+        focusedField = nil
+        Task { await authService.signInWithEmail(email: email, password: password) }
     }
 }
 

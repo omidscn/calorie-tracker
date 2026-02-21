@@ -4,6 +4,7 @@ import SwiftData
 struct DayLogView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(CalorieEstimationService.self) private var calorieService
+    @Environment(CloudSyncMonitor.self) private var syncMonitor
     #if os(iOS)
     @Environment(FoodLookupService.self) private var foodLookupService
     #endif
@@ -55,10 +56,8 @@ struct DayLogView: View {
                             .presentationDetents([.medium])
                     }
                     .sheet(isPresented: $showProfile) {
-                        NavigationStack {
-                            ProfileView()
-                        }
-                        .presentationDetents([.large])
+                        ProfileView()
+                            .presentationDetents([.fraction(0.9)])
                     }
                     #if os(iOS)
                     .sheet(isPresented: $showBarcodeScanner) {
@@ -100,10 +99,6 @@ struct DayLogView: View {
                     #endif
             }
 
-            // Sparkle particles rendered on top — visible regardless of List background
-            SparkleParticlesBackground()
-                .ignoresSafeArea()
-                .allowsHitTesting(false)
         }
     }
 
@@ -197,14 +192,30 @@ struct DayLogView: View {
 
     // MARK: - Header
 
+    private var syncBanner: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "icloud.and.arrow.down")
+                .font(.caption)
+            Text("Syncing with iCloud…")
+                .font(.caption)
+            ProgressView()
+                .scaleEffect(0.7)
+        }
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 7)
+        .glassEffect(.regular, in: .capsule)
+        .transition(.move(edge: .top).combined(with: .opacity))
+    }
+
     private var headerView: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 8) {
             HStack {
                 Button {
                     withAnimation {
                         selectedDate = Calendar.current.date(
                             byAdding: .day, value: -1, to: selectedDate
-                        )!
+                        ) ?? selectedDate
                     }
                 } label: {
                     Image(systemName: "chevron.left")
@@ -217,8 +228,28 @@ struct DayLogView: View {
 
                 Spacer()
 
-                Text(selectedDate.displayString)
-                    .font(.headline)
+                Button {
+                    showProfile = true
+                } label: {
+                    VStack(spacing: 1) {
+                        Text(selectedDate.displayString)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+
+                        Text("\(remainingCalories) kcal")
+                            .font(.system(size: 28, weight: .black, design: .rounded))
+                            .monospacedDigit()
+                            .contentTransition(.numericText())
+
+                        Image(systemName: "chevron.down")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                    .padding(.horizontal, 28)
+                    .padding(.vertical, 10)
+                    .glassEffect(.regular.interactive(), in: .capsule)
+                }
+                .buttonStyle(.plain)
 
                 Spacer()
 
@@ -226,7 +257,7 @@ struct DayLogView: View {
                     withAnimation {
                         selectedDate = Calendar.current.date(
                             byAdding: .day, value: 1, to: selectedDate
-                        )!
+                        ) ?? selectedDate
                     }
                 } label: {
                     Image(systemName: "chevron.right")
@@ -239,28 +270,14 @@ struct DayLogView: View {
             }
             .padding(.horizontal)
 
-            Button {
-                showProfile = true
-            } label: {
-                VStack(spacing: 2) {
-                    Text("\(remainingCalories) kcal")
-                        .font(.system(size: 32, weight: .black, design: .rounded))
-                        .monospacedDigit()
-                        .contentTransition(.numericText())
-
-                    Image(systemName: "chevron.down")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                }
-                .padding(.horizontal, 24)
-                .padding(.vertical, 12)
-                .glassEffect(.regular.interactive(), in: .capsule)
+            if syncMonitor.isSyncing {
+                syncBanner
             }
-            .buttonStyle(.plain)
         }
         .padding(.top, 8)
         .padding(.bottom, 8)
     }
+
 
     // MARK: - Empty State
 
@@ -282,6 +299,7 @@ struct DayLogView: View {
     // MARK: - Actions
 
     private func submitAIEntry() {
+        guard processingMode == .none else { return }
         let text = inputText.trimmingCharacters(in: .whitespaces)
         guard !text.isEmpty else { return }
 

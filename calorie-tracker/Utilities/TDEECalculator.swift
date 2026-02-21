@@ -122,9 +122,19 @@ enum TDEECalculator {
     }
 
     static func calculateDailyCalorieGoal(sex: BiologicalSex, weightKg: Double, heightCm: Double, age: Int, activity: ActivityLevel, goal: WeightGoal) -> Int {
-        let tdee = calculateTDEE(sex: sex, weightKg: weightKg, heightCm: heightCm, age: age, activity: activity)
+        let bmr = calculateBMR(sex: sex, weightKg: weightKg, heightCm: heightCm, age: age)
+        let tdee = bmr * activity.multiplier
         let adjusted = tdee + Double(goal.calorieAdjustment)
-        return max(1200, Int(adjusted.rounded()))
+
+        // Medical guidelines: never eat below these minimums without supervision
+        // Men: 1500 kcal, Women: 1200 kcal (Harvard Health, Healthline)
+        let sexMinimum: Double = sex == .male ? 1500 : 1200
+
+        // Never go below the person's own BMR — eating below BMR impairs basic
+        // organ function and requires medical supervision
+        let safeFloor = max(sexMinimum, bmr)
+
+        return max(Int(safeFloor.rounded()), Int(adjusted.rounded()))
     }
 
     /// Projected weekly weight change in kg (negative = loss).

@@ -111,6 +111,7 @@ struct RecalculateView: View {
                     .padding(.bottom, 16)
                 }
             }
+            .containerBackground(.clear, for: .navigation)
             .navigationTitle("Recalculate")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)

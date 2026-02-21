@@ -16,7 +16,7 @@ struct SplashView: View {
 
             RadialGradient(
                 colors: [
-                    Color(red: 0.10, green: 0.18, blue: 0.55).opacity(0.40),
+                    Color(red: 0.18, green: 0.80, blue: 0.35).opacity(0.35),
                     .clear
                 ],
                 center: .center,
@@ -35,7 +35,7 @@ struct SplashView: View {
                 // Expanding ring pulse
                 Circle()
                     .strokeBorder(
-                        Color(red: 0.15, green: 0.35, blue: 1.0).opacity(ringOpacity),
+                        Color(red: 0.30, green: 0.85, blue: 0.45).opacity(ringOpacity),
                         lineWidth: 1.5
                     )
                     .frame(width: 140, height: 140)
@@ -50,7 +50,7 @@ struct SplashView: View {
                 AppIcon(size: 120)
                     .scaleEffect(iconScale)
                     .shadow(
-                        color: Color(red: 0.15, green: 0.35, blue: 1.0).opacity(glowOpacity),
+                        color: Color(red: 0.30, green: 0.85, blue: 0.45).opacity(glowOpacity),
                         radius: glowRadius
                     )
             }

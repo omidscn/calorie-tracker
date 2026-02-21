@@ -4,6 +4,23 @@ struct EditEntrySheet: View {
     @Bindable var entry: FoodEntry
     @Environment(\.dismiss) private var dismiss
 
+    @State private var caloriesPerUnit: Double
+    @State private var proteinPerUnit: Double?
+    @State private var carbsPerUnit: Double?
+    @State private var fatPerUnit: Double?
+    // Tracks the last calories value we set from a quantity change,
+    // so we can distinguish it from a direct user edit.
+    @State private var quantityDrivenCalories: Int = -1
+
+    init(entry: FoodEntry) {
+        self.entry = entry
+        let q = max(entry.quantity, 0.001)
+        _caloriesPerUnit = State(initialValue: Double(entry.calories) / q)
+        _proteinPerUnit = State(initialValue: entry.proteinGrams.map { $0 / q })
+        _carbsPerUnit = State(initialValue: entry.carbsGrams.map { $0 / q })
+        _fatPerUnit = State(initialValue: entry.fatGrams.map { $0 / q })
+    }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -65,8 +82,22 @@ struct EditEntrySheet: View {
                     Button("Done") { dismiss() }
                 }
             }
+            .onChange(of: entry.quantity) { _, newQty in
+                guard newQty > 0 else { return }
+                let newCals = Int((caloriesPerUnit * newQty).rounded())
+                quantityDrivenCalories = newCals
+                entry.calories = newCals
+                entry.proteinGrams = proteinPerUnit.map { $0 * newQty }
+                entry.carbsGrams = carbsPerUnit.map { $0 * newQty }
+                entry.fatGrams = fatPerUnit.map { $0 * newQty }
+            }
             .onChange(of: entry.calories) {
-                entry.isCalorieOverridden = true
+                // Only treat as a manual override when the change wasn't caused by us
+                if entry.calories != quantityDrivenCalories {
+                    entry.isCalorieOverridden = true
+                    let q = max(entry.quantity, 0.001)
+                    caloriesPerUnit = Double(entry.calories) / q
+                }
             }
         }
     }

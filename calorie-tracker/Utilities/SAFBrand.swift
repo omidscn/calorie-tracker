@@ -55,7 +55,7 @@ struct SparkleShape: Shape {
 
 // MARK: - Sparkle Particles Background
 
-/// Floating ✦ particles + a subtle blue radial glow confined to the top
+/// Floating ✦ particles + a subtle green radial glow confined to the top
 /// portion of the screen, fading to transparent at the midpoint.
 /// Renders **in front of** content at zero hit-testing cost.
 struct SparkleParticlesBackground: View {
@@ -74,10 +74,10 @@ struct SparkleParticlesBackground: View {
             let spawnH = h * 0.48
 
             ZStack {
-                // ── Subtle blue radial glow (same as login page) ───────────
+                // ── Subtle green radial glow ───────────────────────────────
                 RadialGradient(
                     colors: [
-                        Color(red: 0.10, green: 0.18, blue: 0.55).opacity(0.38),
+                        Color(red: 0.18, green: 0.80, blue: 0.35).opacity(0.32),
                         .clear
                     ],
                     center: UnitPoint(x: 0.5, y: 0.0),
@@ -150,24 +150,56 @@ struct SparkleParticlesBackground: View {
 struct AppIcon: View {
     var size: CGFloat = 80
 
-    private var sparkleSize: CGFloat { size * 0.68 }
+    // Grape circle centres from Lucide SVG (viewBox 0 0 24 24)
+    private let circles: [(CGFloat, CGFloat)] = [
+        (13.91,  5.85), (8.11,  7.40), (18.15, 10.09), (12.35, 11.65),
+        ( 6.56, 13.20), (16.60, 15.89), (10.80, 17.44), ( 5.00, 19.00),
+    ]
 
     var body: some View {
         ZStack {
-            RadialGradient(
+            // Green gradient background (matches the app icon PNG)
+            LinearGradient(
                 colors: [
-                    Color(red: 30/255, green: 79/255, blue: 216/255),
-                    Color(red: 9/255,  green: 21/255, blue: 64/255)
+                    Color(red: 96/255,  green: 238/255, blue: 120/255),
+                    Color(red: 10/255,  green: 186/255, blue: 60/255),
                 ],
-                center: .center,
-                startRadius: 0,
-                endRadius: size * 0.68
+                startPoint: .top,
+                endPoint: .bottom
             )
 
-            SparkleShape()
-                .fill(.white)
-                .shadow(color: .white.opacity(0.50), radius: size * 0.07)
-                .frame(width: sparkleSize, height: sparkleSize)
+            // Grape cluster drawn via Canvas — same scale+centering as the PNG generator:
+            //   PNG uses sc=30 for a 1024px canvas, SVG centre (11.5, 12.0) → screen centre.
+            //   SwiftUI Canvas: y-down (same as SVG), so no y-flip needed.
+            Canvas { ctx, canvasSize in
+                let w  = canvasSize.width
+                // Replicate PNG ratio: sc/canvasSize = 30/1024
+                let sc = w * 30.0 / 1024.0
+                // Origin offsets so SVG point (11.5, 12.0) lands at canvas centre
+                let ox = w / 2.0 - 11.5 * sc
+                let oy = w / 2.0 - 12.0 * sc
+                let r  = 3.0 * sc
+
+                // Unified filled path for all 8 grape circles
+                var grapePath = Path()
+                for (cx, cy) in circles {
+                    grapePath.addEllipse(in: CGRect(
+                        x: ox + cx * sc - r, y: oy + cy * sc - r,
+                        width: r * 2,        height: r * 2))
+                }
+                ctx.fill(grapePath, with: .color(.white))
+
+                // Vine tendril: M22 5V2l-5.89 5.89
+                var vine = Path()
+                vine.move(to:    CGPoint(x: ox + 22.00 * sc, y: oy +  5.00 * sc))
+                vine.addLine(to: CGPoint(x: ox + 22.00 * sc, y: oy +  2.00 * sc))
+                vine.addLine(to: CGPoint(x: ox + 16.11 * sc, y: oy +  7.89 * sc))
+                ctx.stroke(vine, with: .color(.white),
+                           style: StrokeStyle(lineWidth: sc * 0.52,
+                                              lineCap: .round, lineJoin: .round))
+            }
+            .shadow(color: .black.opacity(0.22), radius: size * 0.025,
+                    x: 0, y: size * 0.013)
         }
         .frame(width: size, height: size)
         .clipShape(RoundedRectangle(cornerRadius: size * 0.22, style: .continuous))

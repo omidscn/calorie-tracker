@@ -5,6 +5,7 @@ import SwiftData
 struct calorie_trackerApp: App {
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
     @State private var authService = AuthService()
+    @State private var versionService = VersionCheckService()
     @State private var isSplashing = false
     @Environment(\.scenePhase) private var scenePhase
 
@@ -21,7 +22,7 @@ struct calorie_trackerApp: App {
         CloudSyncedDefaults.shared.startSyncing()
     }
 
-    private var showSplash: Bool { authService.isLoading || isSplashing }
+    private var showSplash: Bool { authService.isLoading || isSplashing || !versionService.hasChecked }
 
     var body: some Scene {
         WindowGroup {
@@ -44,14 +45,29 @@ struct calorie_trackerApp: App {
                         .transition(.opacity)
                         .zIndex(1)
                 }
+
+                if versionService.response?.updateRequired == true {
+                    ForceUpdateView(
+                        message: versionService.response?.message ?? "",
+                        storeUrl: versionService.response?.storeUrl ?? ""
+                    )
+                    .transition(.opacity)
+                    .zIndex(2)
+                } else if versionService.response?.isMaintenance == true {
+                    MaintenanceView(message: versionService.response?.message ?? "")
+                        .transition(.opacity)
+                        .zIndex(2)
+                }
             }
             .animation(.easeOut(duration: 0.35), value: showSplash)
+            .animation(.easeOut(duration: 0.35), value: versionService.hasChecked)
             .environment(authService)
+            .task { await versionService.checkVersion() }
             .onChange(of: scenePhase) { previous, current in
                 if previous == .background && current == .active {
                     isSplashing = true
                     Task {
-                        // Hold the splash long enough for auth state to settle
+                        await versionService.checkVersion()
                         try? await Task.sleep(for: .milliseconds(700))
                         isSplashing = false
                     }
